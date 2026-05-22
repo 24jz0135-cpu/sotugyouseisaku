@@ -1,0 +1,21 @@
+body {
+    background-color: lightyellow;
+}
+
+h1 {
+    text-align: center;
+    color: cyan;
+    background-color: green;
+}
+
+b {
+    color: yellow;
+}
+
+small {
+    color: deeppink;
+}
+
+footer {
+    color: deeppink;
+}

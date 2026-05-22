@@ -1,0 +1,53 @@
+npm warn cleanup Failed to remove some directories [
+npm warn cleanup   [
+npm warn cleanup     '\\\\?\\c:\\Users\\24jz\\Documents\\VScode\\MONOLITH\\app\\node_modules\\react-native',
+npm warn cleanup     [Error: ENOTEMPTY: directory not empty, rmdir 'c:\Users\24jz\Documents\VScode\MONOLITH\app\node_modules\react-native\Libraries\Blob'] {
+npm warn cleanup       errno: -4051,
+npm warn cleanup       code: 'ENOTEMPTY',
+npm warn cleanup       syscall: 'rmdir',
+npm warn cleanup       path: 'c:\\Users\\24jz\\Documents\\VScode\\MONOLITH\\app\\node_modules\\react-native\\Libraries\\Blob'
+npm warn cleanup     }
+npm warn cleanup   ],
+npm warn cleanup   [
+npm warn cleanup     'c:\\Users\\24jz\\Documents\\VScode\\MONOLITH\\app\\node_modules\\react-native',
+npm warn cleanup     [Error: ENOTEMPTY: directory not empty, rmdir 'c:\Users\24jz\Documents\VScode\MONOLITH\app\node_modules\react-native\Libraries\Blob'] {
+npm warn cleanup       errno: -4051,
+npm warn cleanup       code: 'ENOTEMPTY',
+npm warn cleanup       syscall: 'rmdir',
+npm warn cleanup       path: 'c:\\Users\\24jz\\Documents\\VScode\\MONOLITH\\app\\node_modules\\react-native\\Libraries\\Blob'
+npm warn cleanup     }
+npm warn cleanup   ],
+npm warn cleanup   [
+npm warn cleanup     '\\\\?\\c:\\Users\\24jz\\Documents\\VScode\\MONOLITH\\app\\node_modules\\resolve',
+npm warn cleanup     [Error: EBUSY: resource busy or locked, rmdir 'c:\Users\24jz\Documents\VScode\MONOLITH\app\node_modules\resolve\test\resolver\symlinked\_\symlink_target'] {
+npm warn cleanup       errno: -4082,
+npm warn cleanup       code: 'EBUSY',
+npm warn cleanup       syscall: 'rmdir',
+npm warn cleanup       path: 'c:\\Users\\24jz\\Documents\\VScode\\MONOLITH\\app\\node_modules\\resolve\\test\\resolver\\symlinked\\_\\symlink_target'
+npm warn cleanup     }
+npm warn cleanup   ],
+npm warn cleanup   [
+npm warn cleanup     'c:\\Users\\24jz\\Documents\\VScode\\MONOLITH\\app\\node_modules\\resolve',
+npm warn cleanup     [Error: EBUSY: resource busy or locked, rmdir 'c:\Users\24jz\Documents\VScode\MONOLITH\app\node_modules\resolve\test\resolver\symlinked\_\symlink_target'] {
+npm warn cleanup       errno: -4082,
+npm warn cleanup       code: 'EBUSY',
+npm warn cleanup       syscall: 'rmdir',
+npm warn cleanup       path: 'c:\\Users\\24jz\\Documents\\VScode\\MONOLITH\\app\\node_modules\\resolve\\test\\resolver\\symlinked\\_\\symlink_target'
+npm warn cleanup     }
+npm warn cleanup   ],
+npm warn cleanup   [
+npm warn cleanup     '\\\\?\\c:\\Users\\24jz\\Documents\\VScode\\MONOLITH\\app\\node_modules\\@expo\\cli',
+npm warn cleanup     [Error: EPERM: operation not permitted, rmdir 'c:\Users\24jz\Documents\VScode\MONOLITH\app\node_modules\@expo\cli\static\shims\react-native-web\dist\cjs'] {
+npm warn cleanup       errno: -4048,
+npm warn cleanup       code: 'EPERM',
+npm warn cleanup       syscall: 'rmdir',
+npm warn cleanup       path: 'c:\\Users\\24jz\\Documents\\VScode\\MONOLITH\\app\\node_modules\\@expo\\cli\\static\\shims\\react-native-web\\dist\\cjs'
+npm warn cleanup     }
+npm warn cleanup   ]
+npm warn cleanup ]
+npm error code ENOTEMPTY
+npm error syscall rmdir
+npm error path c:\Users\24jz\Documents\VScode\MONOLITH\app\node_modules\react-native\Libraries\Core
+npm error errno -4051
+npm error ENOTEMPTY: directory not empty, rmdir 'c:\Users\24jz\Documents\VScode\MONOLITH\app\node_modules\react-native\Libraries\Core'
+npm error A complete log of this run can be found in: C:\Users\24jz\AppData\Local\npm-cache\_logs\2026-04-24T03_36_32_243Z-debug-0.log

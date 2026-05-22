@@ -1,0 +1,23 @@
+/* 全体の背景色をlightyellowに */
+body {
+  background-color: blue;
+}
+
+/* 番号付きリスト（ol）の番号をローマ数字にする */
+ol {
+  list-style-type: upper-roman;
+}
+
+/* 一覧リスト（ul）の点をオリジナルの画像にする */
+ul {
+  list-style-type: none;
+}
+
+ul li {
+  background-image: url("img/fing.jpg");
+  background-size: 1em;
+  background-repeat: no-repeat;
+  background-position: left center;
+  padding-left: 1.5em;
+}
+

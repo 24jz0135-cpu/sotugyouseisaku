@@ -1,0 +1,23 @@
+@charset "utf-8";
+
+body {
+  background-color: pink;
+}
+
+figure {
+  margin: 0 0 20px 0;
+}
+
+figure.left {
+  float: right;
+}
+
+figure.right {
+  float: left;
+}
+
+img {
+  display: block;
+  height: auto;
+}
+
