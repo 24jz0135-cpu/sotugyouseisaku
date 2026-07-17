@@ -1,0 +1,13 @@
+name = "instant-ledger-backend"
+main = "src/index.ts"
+compatibility_date = "2026-06-11"
+
+# あなたが作ったD1データベース（SQL）とプログラムを紐付けます
+[[d1_databases]]
+binding = "DB" # プログラム内で「env.DB」として使うための名前
+database_name = "instant_ledger_db"
+# ローカルではローカルDB ID、Cloudflareへデプロイする場合は本物の D1 database_id に差し替えが必要
+# 例: database_id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+database_id = ""
+# 一番下に追加する
+migrations_dir = "../database-d1/migrations"
