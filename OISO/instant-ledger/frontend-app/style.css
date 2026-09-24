@@ -1113,8 +1113,8 @@ button {
   box-shadow: 0 25px 50px -12px rgba(7, 85, 157, 0.32);
 }
 :root[data-theme='ocean'] .phone-status-bar,
-:root[data-theme='ocean'] .app-header { background-color: rgba(229, 246, 255, 0.9); }
-:root[data-theme='ocean'] .app-nav { background-color: rgba(255, 255, 255, 0.92); }
+:root[data-theme='ocean'] .app-header { background-color: rgba(198, 234, 251, 0.96); }
+:root[data-theme='ocean'] .app-nav { background-color: rgba(215, 241, 253, 0.96); }
 :root[data-theme='ocean'] .tax-badge { color: #F59E0B; }
 :root[data-theme='ocean'] .summary-card.total {
   background: linear-gradient(135deg, #FFF3B5 0%, #FFD978 52%, #FFAF43 100%);
