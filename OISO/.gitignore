@@ -1,0 +1,9 @@
+# Generated dependencies and local Cloudflare development state
+**/node_modules/
+**/.wrangler/
+
+# Local databases and logs
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.log

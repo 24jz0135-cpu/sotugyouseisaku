@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Instant Ledger - 現場の経費ファクト記録</title>
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons (CDN) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- メインコンテナ：スマホのシミュレーター風に表示 -->
+  <div class="phone-wrapper">
+    <div class="phone-container">
+      
+      <!-- ステータスバー（スマホらしさの演出） -->
+      <div class="phone-status-bar">
+        <span class="time" id="status-time">10:30</span>
+        <div class="status-icons">
+          <i data-lucide="wifi" class="icon-small"></i>
+          <i data-lucide="battery" class="icon-small"></i>
+        </div>
+      </div>
+
+      <!-- アプリヘッダー -->
+      <header class="app-header">
+        <div class="user-profile">
+          <div class="avatar">
+            <i data-lucide="store" class="avatar-icon"></i>
+          </div>
+          <div class="user-info">
+            <h1 class="restaurant-name">新宿ビストロ・エッジ</h1>
+            <span class="tax-badge"><i data-lucide="award" class="icon-tiny"></i> 青色申告 (BLUE)</span>
+          </div>
+        </div>
+        <button class="btn-refresh" id="btn-refresh" title="データを更新">
+          <i data-lucide="rotate-cw"></i>
+        </button>
+      </header>
+
+      <!-- 画面エリア (タブによって切り替える) -->
+      <main class="app-content">
+
+        <!-- 1. ホーム画面 -->
+        <section id="screen-home" class="screen-panel active">
+          <h2 class="section-title">ダッシュボード</h2>
+          
+          <!-- サマリーカード -->
+          <div class="summary-grid">
+            <div class="summary-card total">
+              <span class="card-label">今月の経費合計</span>
+              <span class="card-value" id="summary-total">¥0</span>
+              <span class="card-trend text-up"><i data-lucide="trending-up" class="icon-tiny"></i> 前月比 +5.2%</span>
+            </div>
+            
+            <div class="summary-sub-grid">
+              <div class="summary-card pending">
+                <span class="card-label">未確定ファクト</span>
+                <span class="card-value" id="summary-pending-count">0 件</span>
+                <span class="card-value-sub" id="summary-pending-amount">¥0</span>
+              </div>
+              <div class="summary-card verified">
+                <span class="card-label">確定済み経費</span>
+                <span class="card-value" id="summary-verified-count">0 件</span>
+                <span class="card-value-sub" id="summary-verified-amount">¥0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 経費カテゴリ割合 (視覚的メータ) -->
+          <div class="analytics-section">
+            <h3 class="subsection-title">経費カテゴリ内訳</h3>
+            <div class="category-bars" id="category-chart">
+              <!-- JSで動的に構築します -->
+              <div class="no-data-msg">経費データがありません</div>
+            </div>
+          </div>
+
+          <!-- 直近の未確定項目クイックアクセス -->
+          <div class="recent-section">
+            <div class="section-header-link">
+              <h3 class="subsection-title">要確認の現場ファクト</h3>
+            </div>
+            <div class="recent-list" id="recent-pending-list">
+              <!-- JSで未確定データを動的に描画 -->
+              <div class="loading-spinner">
+                <i data-lucide="loader" class="spin"></i>
+                <span>読み込み中...</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- 2. スキャン & 音声入力画面 -->
+        <section id="screen-scan" class="screen-panel">
+          <h2 class="section-title">現場で記録する</h2>
+          
+          <div class="sensor-tabs">
+            <button class="sensor-tab active" id="tab-camera">
+              <i data-lucide="camera"></i>
+              <span>レシート撮影</span>
+            </button>
+            <button class="sensor-tab" id="tab-voice">
+              <i data-lucide="mic"></i>
+              <span>音声メモ</span>
+            </button>
+          </div>
+
+          <!-- カメラシミュレータ -->
+          <div id="panel-camera" class="sensor-panel active">
+            <div class="camera-viewport">
+              <div class="scanline"></div>
+              <div class="camera-overlay-corner top-left"></div>
+              <div class="camera-overlay-corner top-right"></div>
+              <div class="camera-overlay-corner bottom-left"></div>
+              <div class="camera-overlay-corner bottom-right"></div>
+              
+              <!-- 実際のカメラ映像ストリームと撮影後のキャプチャ表示 -->
+              <video id="camera-stream" autoplay playsinline class="camera-video-elem hidden"></video>
+              <img id="camera-captured-img" class="camera-captured-img hidden" alt="Captured receipt">
+              
+              <div class="camera-placeholder" id="camera-preview-box">
+                <i data-lucide="image" class="placeholder-icon"></i>
+                <p>ここに領収書・レシートを収めてください</p>
+                <span class="location-badge" id="camera-location"><i data-lucide="map-pin"></i> 検出中...</span>
+              </div>
+            </div>
+            
+            <div class="action-bar">
+              <button class="btn-primary btn-glow" id="btn-capture">
+                <i data-lucide="aperture"></i>
+                <span>写真を撮影してOCR解析</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 音声シミュレータ -->
+          <div id="panel-voice" class="sensor-panel">
+            <div class="voice-viewport">
+              <div class="voice-wave" id="voice-wave-container">
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+                <div class="wave-bar"></div>
+              </div>
+              
+              <div class="voice-placeholder" id="voice-preview-box">
+                <i data-lucide="mic" class="placeholder-icon"></i>
+                <p id="voice-status-text">ボタンを押して、仕入れ内容を話してください</p>
+                <span class="location-badge" id="voice-location"><i data-lucide="map-pin"></i> 検出中...</span>
+              </div>
+            </div>
+            
+            <div class="action-bar">
+              <button class="btn-primary btn-glow" id="btn-record">
+                <i data-lucide="mic"></i>
+                <span id="btn-record-text">音声メモを入力する</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- プレビューと保存用フォーム (スキャン/録音後に表示) -->
+          <div class="fact-preview-card hidden" id="fact-preview-card">
+            <div class="preview-header">
+              <span class="preview-badge"><i data-lucide="sparkles"></i> AI解析結果</span>
+              <button class="btn-close" id="btn-cancel-preview"><i data-lucide="x"></i></button>
+            </div>
+            
+            <div class="preview-form">
+              <div class="form-group">
+                <label>検出した場所 (店舗名)</label>
+                <input type="text" id="input-vendor" placeholder="例: 鮮魚田中 豊洲店">
+              </div>
+              <div class="form-group">
+                <label>金額 (円)</label>
+                <input type="number" id="input-amount" placeholder="例: 12500">
+              </div>
+              <div class="form-group">
+                <label>勘定科目</label>
+                <select id="input-category">
+                  <option value="仕入高">仕入高 (食材・飲料)</option>
+                  <option value="消耗品費">消耗品費 (備品・衛生用品)</option>
+                  <option value="旅費交通費">旅費交通費 (買い出し移動)</option>
+                  <option value="水道光熱費">水道光熱費</option>
+                  <option value="雑費">雑費</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>解析テキスト・音声生ログ</label>
+                <textarea id="input-rawtext" rows="2" placeholder="解析結果のテキスト"></textarea>
+              </div>
+              
+              <div class="form-row geo-info">
+                <span><i data-lucide="map-pin"></i> 緯度: <span id="span-lat">0.0000</span></span>
+                <span>経度: <span id="span-lng">0.0000</span></span>
+              </div>
+
+              <button class="btn-success" id="btn-save-fact">
+                <i data-lucide="check-circle-2"></i>
+                <span>この経費を記録する</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- 3. 履歴画面 -->
+        <section id="screen-history" class="screen-panel">
+          <h2 class="section-title">記録データ履歴</h2>
+          
+          <div class="filter-bar">
+            <button class="filter-tab active" data-filter="all">すべて</button>
+            <button class="filter-tab" data-filter="PENDING">未確定</button>
+            <button class="filter-tab" data-filter="VERIFIED">確定済み</button>
+          </div>
+
+          <div class="history-list" id="history-items-list">
+            <!-- JSで動的に描画 -->
+            <div class="loading-spinner">
+              <i data-lucide="loader" class="spin"></i>
+              <span>読み込み中...</span>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- ボトムナビゲーションバー -->
+      <nav class="app-nav">
+        <button class="nav-item active" data-target="screen-home">
+          <i data-lucide="layout-dashboard"></i>
+          <span>ホーム</span>
+        </button>
+        <button class="nav-item" data-target="screen-scan">
+          <i data-lucide="plus-circle" class="nav-icon-main"></i>
+          <span>現場で記録</span>
+        </button>
+        <button class="nav-item" data-target="screen-history">
+          <i data-lucide="receipt"></i>
+          <span>履歴一覧</span>
+        </button>
+      </nav>
+
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

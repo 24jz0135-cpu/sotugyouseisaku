@@ -1,0 +1,13 @@
+{
+  "name": "instant-ledger-backend",
+  "version": "1.0.0",
+  "description": "飲食店特化型確定申告アプリのバックエンド",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.99.0"
+  }
+}
