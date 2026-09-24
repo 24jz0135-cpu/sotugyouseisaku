@@ -1089,20 +1089,41 @@ button {
 :root[data-theme='amber'] .btn-refresh { background: rgba(255, 255, 255, 0.12); color: #FFF9F2; border-color: rgba(255, 255, 255, 0.2); }
 
 :root[data-theme='ocean'] {
-  --bg-app: #E0F2FE;
-  --bg-phone: #F8FDFF;
-  --bg-card: rgba(240, 249, 255, 0.92);
-  --bg-card-hover: #E0F2FE;
-  --border-color: rgba(3, 105, 161, 0.15);
-  --primary: #0284C7;
-  --primary-glow: rgba(2, 132, 199, 0.2);
-  --accent: #0891B2;
-  --gradient-primary: linear-gradient(135deg, #0284C7 0%, #06B6D4 100%);
-  --color-text: #164E63;
-  --color-text-muted: #527B8B;
-  --color-text-dark: #083344;
+  --bg-app: #DFF4FF;
+  --bg-phone: #F9FDFF;
+  --bg-card: rgba(248, 253, 255, 0.94);
+  --bg-card-hover: #E6F7FF;
+  --border-color: rgba(56, 144, 201, 0.18);
+  --primary: #07559D;
+  --primary-glow: rgba(7, 85, 157, 0.18);
+  --accent: #FF6B3D;
+  --gradient-primary: linear-gradient(135deg, #FFCF45 0%, #FFB11F 100%);
+  --color-text: #15518B;
+  --color-text-muted: #5A83AA;
+  --color-text-dark: #0B477F;
 }
-:root[data-theme='ocean'] .phone-wrapper { background: #083344; }
+:root[data-theme='ocean'] body {
+  background-image:
+    radial-gradient(at 0% 0%, rgba(255, 255, 255, 0.82) 0px, transparent 52%),
+    radial-gradient(at 100% 100%, rgba(117, 207, 255, 0.34) 0px, transparent 55%);
+}
+:root[data-theme='ocean'] .phone-wrapper {
+  background: #2E80BD;
+  border-color: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 25px 50px -12px rgba(7, 85, 157, 0.32);
+}
+:root[data-theme='ocean'] .phone-status-bar,
+:root[data-theme='ocean'] .app-header { background-color: rgba(229, 246, 255, 0.9); }
+:root[data-theme='ocean'] .app-nav { background-color: rgba(255, 255, 255, 0.92); }
+:root[data-theme='ocean'] .tax-badge { color: #F59E0B; }
+:root[data-theme='ocean'] .summary-card.total {
+  background: linear-gradient(135deg, #FFF3B5 0%, #FFD978 52%, #FFAF43 100%);
+  border-color: rgba(255, 190, 61, 0.58);
+  box-shadow: 0 8px 20px rgba(255, 172, 48, 0.18);
+}
+:root[data-theme='ocean'] .summary-card.total::after { background: rgba(255, 255, 255, 0.23); }
+:root[data-theme='ocean'] .nav-icon-main { color: #FF7040; }
+:root[data-theme='ocean'] .nav-item.active .nav-icon-main { filter: drop-shadow(0 0 6px rgba(255, 112, 64, 0.42)); }
 
 :root[data-theme='forest'] {
   --bg-app: #ECFDF5;
