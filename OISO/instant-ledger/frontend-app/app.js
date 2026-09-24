@@ -104,6 +104,7 @@ const documentElements = {
   categoryChart: document.getElementById('category-chart'),
   recentPendingList: document.getElementById('recent-pending-list'),
   btnRefresh: document.getElementById('btn-refresh'),
+  btnTheme: document.getElementById('btn-theme'),
 
   // Sensors (Scan/Voice)
   tabCamera: document.getElementById('tab-camera'),
@@ -144,6 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
   updateStatusTime();
   setInterval(updateStatusTime, 60000);
 
+  initThemeToggle();
+
   // イベントリスナー登録
   initNavigation();
   initSensorControls();
@@ -161,6 +164,29 @@ function updateStatusTime() {
   const timeStr = `${hours}:${minutes}`;
   const statusTimeEl = document.getElementById('status-time');
   if (statusTimeEl) statusTimeEl.textContent = timeStr;
+}
+
+function initThemeToggle() {
+  const updateThemeButton = () => {
+    const isDark = document.documentElement.dataset.theme === 'dark';
+    documentElements.btnTheme.setAttribute('aria-label', isDark ? '通常モードに切り替え' : 'ダークモードに切り替え');
+    documentElements.btnTheme.title = isDark ? '通常モードに切り替え' : 'ダークモードに切り替え';
+    documentElements.btnTheme.innerHTML = `<i data-lucide="${isDark ? 'sun' : 'moon'}"></i>`;
+    lucide.createIcons();
+  };
+
+  updateThemeButton();
+  documentElements.btnTheme.addEventListener('click', () => {
+    const isDark = document.documentElement.dataset.theme === 'dark';
+    if (isDark) {
+      delete document.documentElement.dataset.theme;
+      localStorage.setItem('instant-ledger-theme', 'light');
+    } else {
+      document.documentElement.dataset.theme = 'dark';
+      localStorage.setItem('instant-ledger-theme', 'dark');
+    }
+    updateThemeButton();
+  });
 }
 
 // ==========================================

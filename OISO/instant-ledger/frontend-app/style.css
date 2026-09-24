@@ -131,6 +131,12 @@ body {
   gap: 12px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .avatar {
   width: 42px;
   height: 42px;
@@ -168,7 +174,8 @@ body {
   margin-top: 2px;
 }
 
-.btn-refresh {
+.btn-refresh,
+.btn-theme {
   background: rgba(0, 0, 0, 0.03);
   border: 1px solid var(--border-color);
   color: var(--color-text-muted);
@@ -181,7 +188,8 @@ body {
   align-items: center;
   transition: all 0.2s ease;
 }
-.btn-refresh:hover {
+.btn-refresh:hover,
+.btn-theme:hover {
   background: rgba(0, 0, 0, 0.06);
   color: var(--color-text-dark);
   transform: rotate(30deg);
@@ -940,4 +948,65 @@ button {
 .nav-item.active .nav-icon-main {
   transform: scale(1.1);
   filter: drop-shadow(0 0 6px rgba(236, 72, 153, 0.5));
+}
+
+/* ==========================================
+   Dark Theme
+   ========================================== */
+:root[data-theme='dark'] {
+  --bg-app: #111827;
+  --bg-phone: #172033;
+  --bg-card: rgba(30, 41, 59, 0.9);
+  --bg-card-hover: rgba(51, 65, 85, 0.95);
+  --border-color: rgba(226, 232, 240, 0.14);
+  --primary: #A78BFA;
+  --primary-glow: rgba(167, 139, 250, 0.25);
+  --accent: #F472B6;
+  --gradient-primary: linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%);
+  --color-text: #CBD5E1;
+  --color-text-muted: #94A3B8;
+  --color-text-dark: #F8FAFC;
+}
+
+:root[data-theme='dark'] body {
+  background-image:
+    radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.18) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(236, 72, 153, 0.12) 0px, transparent 50%);
+}
+
+:root[data-theme='dark'] .phone-wrapper {
+  background: #020617;
+  border-color: rgba(226, 232, 240, 0.12);
+}
+
+:root[data-theme='dark'] .app-header,
+:root[data-theme='dark'] .app-nav {
+  background-color: rgba(23, 32, 51, 0.9);
+}
+
+:root[data-theme='dark'] .btn-refresh,
+:root[data-theme='dark'] .btn-theme,
+:root[data-theme='dark'] .filter-tab,
+:root[data-theme='dark'] .btn-close,
+:root[data-theme='dark'] .history-item {
+  background: rgba(226, 232, 240, 0.08);
+}
+
+:root[data-theme='dark'] .btn-refresh:hover,
+:root[data-theme='dark'] .btn-theme:hover {
+  background: rgba(226, 232, 240, 0.16);
+}
+
+:root[data-theme='dark'] .fact-preview-card,
+:root[data-theme='dark'] .history-item,
+:root[data-theme='dark'] input,
+:root[data-theme='dark'] select,
+:root[data-theme='dark'] textarea {
+  background-color: #1E293B;
+  color: var(--color-text-dark);
+}
+
+:root[data-theme='dark'] input::placeholder,
+:root[data-theme='dark'] textarea::placeholder {
+  color: #94A3B8;
 }

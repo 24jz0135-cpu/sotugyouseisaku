@@ -11,6 +11,11 @@
   <!-- Lucide Icons (CDN) -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <link rel="stylesheet" href="style.css">
+  <script>
+    if (localStorage.getItem('instant-ledger-theme') === 'dark') {
+      document.documentElement.dataset.theme = 'dark';
+    }
+  </script>
 </head>
 <body>
 
@@ -38,9 +43,14 @@
             <span class="tax-badge"><i data-lucide="award" class="icon-tiny"></i> 青色申告 (BLUE)</span>
           </div>
         </div>
-        <button class="btn-refresh" id="btn-refresh" title="データを更新">
-          <i data-lucide="rotate-cw"></i>
-        </button>
+        <div class="header-actions">
+          <button class="btn-theme" id="btn-theme" type="button" aria-label="ダークモードに切り替え" title="ダークモードに切り替え">
+            <i data-lucide="moon"></i>
+          </button>
+          <button class="btn-refresh" id="btn-refresh" title="データを更新">
+            <i data-lucide="rotate-cw"></i>
+          </button>
+        </div>
       </header>
 
       <!-- 画面エリア (タブによって切り替える) -->
