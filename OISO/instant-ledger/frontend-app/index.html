@@ -12,9 +12,8 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <link rel="stylesheet" href="style.css">
   <script>
-    if (localStorage.getItem('instant-ledger-theme') === 'dark') {
-      document.documentElement.dataset.theme = 'dark';
-    }
+    const savedTheme = localStorage.getItem('instant-ledger-theme');
+    if (savedTheme && savedTheme !== 'light') document.documentElement.dataset.theme = savedTheme;
   </script>
 </head>
 <body>
@@ -44,12 +43,20 @@
           </div>
         </div>
         <div class="header-actions">
-          <button class="btn-theme" id="btn-theme" type="button" aria-label="ダークモードに切り替え" title="ダークモードに切り替え">
-            <i data-lucide="moon"></i>
+          <button class="btn-theme" id="btn-theme" type="button" aria-label="テーマを選択" title="テーマを選択" aria-expanded="false" aria-controls="theme-menu">
+            <i data-lucide="palette"></i>
           </button>
           <button class="btn-refresh" id="btn-refresh" title="データを更新">
             <i data-lucide="rotate-cw"></i>
           </button>
+        </div>
+        <div class="theme-menu hidden" id="theme-menu" role="dialog" aria-label="カラーテーマを選択">
+          <p class="theme-menu-title">カラーテーマ</p>
+          <button class="theme-option active" type="button" data-theme="light"><span class="theme-swatch theme-light"></span><span>ライト</span></button>
+          <button class="theme-option" type="button" data-theme="dark"><span class="theme-swatch theme-dark"></span><span>ダーク</span></button>
+          <button class="theme-option" type="button" data-theme="amber"><span class="theme-swatch theme-amber"></span><span>アンバー</span></button>
+          <button class="theme-option" type="button" data-theme="ocean"><span class="theme-swatch theme-ocean"></span><span>オーシャン</span></button>
+          <button class="theme-option" type="button" data-theme="forest"><span class="theme-swatch theme-forest"></span><span>フォレスト</span></button>
         </div>
       </header>
 

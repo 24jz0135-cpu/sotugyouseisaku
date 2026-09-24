@@ -105,6 +105,8 @@ const documentElements = {
   recentPendingList: document.getElementById('recent-pending-list'),
   btnRefresh: document.getElementById('btn-refresh'),
   btnTheme: document.getElementById('btn-theme'),
+  themeMenu: document.getElementById('theme-menu'),
+  themeOptions: document.querySelectorAll('.theme-option'),
 
   // Sensors (Scan/Voice)
   tabCamera: document.getElementById('tab-camera'),
@@ -145,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateStatusTime();
   setInterval(updateStatusTime, 60000);
 
-  initThemeToggle();
+  initThemePicker();
 
   // イベントリスナー登録
   initNavigation();
@@ -166,26 +168,35 @@ function updateStatusTime() {
   if (statusTimeEl) statusTimeEl.textContent = timeStr;
 }
 
-function initThemeToggle() {
-  const updateThemeButton = () => {
-    const isDark = document.documentElement.dataset.theme === 'dark';
-    documentElements.btnTheme.setAttribute('aria-label', isDark ? '通常モードに切り替え' : 'ダークモードに切り替え');
-    documentElements.btnTheme.title = isDark ? '通常モードに切り替え' : 'ダークモードに切り替え';
-    documentElements.btnTheme.innerHTML = `<i data-lucide="${isDark ? 'sun' : 'moon'}"></i>`;
-    lucide.createIcons();
+function initThemePicker() {
+  const getCurrentTheme = () => document.documentElement.dataset.theme || 'light';
+  const closeMenu = () => {
+    documentElements.themeMenu.classList.add('hidden');
+    documentElements.btnTheme.setAttribute('aria-expanded', 'false');
+  };
+  const applyTheme = (theme) => {
+    if (theme === 'light') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+    localStorage.setItem('instant-ledger-theme', theme);
+    documentElements.themeOptions.forEach(option => option.classList.toggle('active', option.dataset.theme === theme));
+    closeMenu();
   };
 
-  updateThemeButton();
-  documentElements.btnTheme.addEventListener('click', () => {
-    const isDark = document.documentElement.dataset.theme === 'dark';
-    if (isDark) {
-      delete document.documentElement.dataset.theme;
-      localStorage.setItem('instant-ledger-theme', 'light');
-    } else {
-      document.documentElement.dataset.theme = 'dark';
-      localStorage.setItem('instant-ledger-theme', 'dark');
-    }
-    updateThemeButton();
+  documentElements.themeOptions.forEach(option => {
+    option.classList.toggle('active', option.dataset.theme === getCurrentTheme());
+    option.addEventListener('click', () => applyTheme(option.dataset.theme));
+  });
+  documentElements.btnTheme.addEventListener('click', event => {
+    event.stopPropagation();
+    const isOpen = !documentElements.themeMenu.classList.contains('hidden');
+    documentElements.themeMenu.classList.toggle('hidden', isOpen);
+    documentElements.btnTheme.setAttribute('aria-expanded', String(!isOpen));
+  });
+  document.addEventListener('click', event => {
+    if (!documentElements.themeMenu.contains(event.target) && event.target !== documentElements.btnTheme) closeMenu();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeMenu();
   });
 }
 

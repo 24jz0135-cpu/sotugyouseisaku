@@ -115,6 +115,7 @@ body {
    App Header Component
    ========================================== */
 .app-header {
+  position: relative;
   padding: 16px 20px;
   display: flex;
   justify-content: space-between;
@@ -194,6 +195,56 @@ body {
   color: var(--color-text-dark);
   transform: rotate(30deg);
 }
+
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 16px;
+  width: 176px;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-phone);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+  z-index: 30;
+}
+.theme-menu.hidden { display: none; }
+.theme-menu-title {
+  margin: 2px 6px 8px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.theme-option {
+  width: 100%;
+  padding: 8px 7px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.theme-option:hover, .theme-option.active { background: var(--bg-card-hover); }
+.theme-option.active::after { content: '✓'; margin-left: auto; color: var(--primary); }
+.theme-swatch {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+.theme-light { background: linear-gradient(135deg, #7C3AED 0 50%, #DB2777 50%); }
+.theme-dark { background: linear-gradient(135deg, #111827 0 50%, #A78BFA 50%); }
+.theme-amber { background: linear-gradient(135deg, #5B301F 0 50%, #FFB21A 50%); }
+.theme-ocean { background: linear-gradient(135deg, #075985 0 50%, #22D3EE 50%); }
+.theme-forest { background: linear-gradient(135deg, #14532D 0 50%, #84CC16 50%); }
 
 /* ==========================================
    Content Area & Tab System
@@ -1010,3 +1061,61 @@ button {
 :root[data-theme='dark'] textarea::placeholder {
   color: #94A3B8;
 }
+
+:root[data-theme='amber'] {
+  --bg-app: #3A2118;
+  --bg-phone: #FFF9F2;
+  --bg-card: rgba(255, 249, 242, 0.92);
+  --bg-card-hover: #F8EBDD;
+  --border-color: rgba(92, 48, 31, 0.16);
+  --primary: #D97706;
+  --primary-glow: rgba(217, 119, 6, 0.2);
+  --accent: #F4511E;
+  --gradient-primary: linear-gradient(135deg, #F59E0B 0%, #F4511E 100%);
+  --color-text: #5B3828;
+  --color-text-muted: #8B6857;
+  --color-text-dark: #3B2317;
+}
+:root[data-theme='amber'] body { background-image: radial-gradient(at 0% 0%, rgba(251, 191, 36, 0.2) 0px, transparent 50%); }
+:root[data-theme='amber'] .phone-wrapper { background: #2B160E; border-color: rgba(255, 255, 255, 0.12); }
+:root[data-theme='amber'] .phone-status-bar,
+:root[data-theme='amber'] .app-header,
+:root[data-theme='amber'] .app-nav { background-color: #5B301F; color: #FFF9F2; }
+:root[data-theme='amber'] .app-header .restaurant-name,
+:root[data-theme='amber'] .phone-status-bar,
+:root[data-theme='amber'] .app-nav .nav-item { color: #FFF9F2; }
+:root[data-theme='amber'] .app-nav .nav-item.active { color: #FDBA24; }
+:root[data-theme='amber'] .btn-theme,
+:root[data-theme='amber'] .btn-refresh { background: rgba(255, 255, 255, 0.12); color: #FFF9F2; border-color: rgba(255, 255, 255, 0.2); }
+
+:root[data-theme='ocean'] {
+  --bg-app: #E0F2FE;
+  --bg-phone: #F8FDFF;
+  --bg-card: rgba(240, 249, 255, 0.92);
+  --bg-card-hover: #E0F2FE;
+  --border-color: rgba(3, 105, 161, 0.15);
+  --primary: #0284C7;
+  --primary-glow: rgba(2, 132, 199, 0.2);
+  --accent: #0891B2;
+  --gradient-primary: linear-gradient(135deg, #0284C7 0%, #06B6D4 100%);
+  --color-text: #164E63;
+  --color-text-muted: #527B8B;
+  --color-text-dark: #083344;
+}
+:root[data-theme='ocean'] .phone-wrapper { background: #083344; }
+
+:root[data-theme='forest'] {
+  --bg-app: #ECFDF5;
+  --bg-phone: #FBFFFC;
+  --bg-card: rgba(240, 253, 244, 0.92);
+  --bg-card-hover: #DCFCE7;
+  --border-color: rgba(22, 101, 52, 0.15);
+  --primary: #15803D;
+  --primary-glow: rgba(21, 128, 61, 0.2);
+  --accent: #65A30D;
+  --gradient-primary: linear-gradient(135deg, #15803D 0%, #84CC16 100%);
+  --color-text: #14532D;
+  --color-text-muted: #5B7C66;
+  --color-text-dark: #052E16;
+}
+:root[data-theme='forest'] .phone-wrapper { background: #052E16; }
