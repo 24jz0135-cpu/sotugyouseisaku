@@ -328,6 +328,8 @@ body {
   border-radius: 50%;
 }
 
+.summer-sun { display: none; }
+
 .card-label {
   font-size: 11px;
   font-weight: 600;
@@ -1122,6 +1124,19 @@ button {
   box-shadow: 0 8px 20px rgba(255, 172, 48, 0.18);
 }
 :root[data-theme='ocean'] .summary-card.total > * { position: relative; z-index: 1; }
+:root[data-theme='ocean'] .summary-card.total .summer-sun {
+  display: block;
+  position: absolute;
+  top: 8px;
+  right: 11px;
+  z-index: 1;
+  width: 64px;
+  height: 64px;
+  fill: #FFC43D;
+  stroke: #FFC43D;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
 :root[data-theme='ocean'] .summary-card.total::before {
   content: '';
   position: absolute;
@@ -1134,15 +1149,7 @@ button {
   transform: rotate(-8deg);
 }
 :root[data-theme='ocean'] .summary-card.total::after {
-  top: 13px;
-  right: 19px;
-  width: 46px;
-  height: 46px;
-  background: #FFC43D;
-  opacity: 0.92;
-  filter: none;
-  border-radius: 50%;
-  box-shadow: -16px 13px 0 -13px #FFC43D, -24px 0 0 -13px #FFC43D, -16px -13px 0 -13px #FFC43D, 0 -18px 0 -13px #FFC43D;
+  content: none;
 }
 :root[data-theme='ocean'] .nav-icon-main { color: #FF7040; }
 :root[data-theme='ocean'] .nav-item.active .nav-icon-main { filter: drop-shadow(0 0 6px rgba(255, 112, 64, 0.42)); }
