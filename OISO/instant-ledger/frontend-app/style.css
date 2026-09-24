@@ -1121,7 +1121,29 @@ button {
   border-color: rgba(255, 190, 61, 0.58);
   box-shadow: 0 8px 20px rgba(255, 172, 48, 0.18);
 }
-:root[data-theme='ocean'] .summary-card.total::after { background: rgba(255, 255, 255, 0.23); }
+:root[data-theme='ocean'] .summary-card.total > * { position: relative; z-index: 1; }
+:root[data-theme='ocean'] .summary-card.total::before {
+  content: '';
+  position: absolute;
+  right: -52px;
+  bottom: -76px;
+  width: 310px;
+  height: 130px;
+  background: rgba(246, 159, 55, 0.5);
+  border-radius: 55% 0 0 0;
+  transform: rotate(-8deg);
+}
+:root[data-theme='ocean'] .summary-card.total::after {
+  top: 13px;
+  right: 19px;
+  width: 46px;
+  height: 46px;
+  background: #FFC43D;
+  opacity: 0.92;
+  filter: none;
+  border-radius: 50%;
+  box-shadow: -16px 13px 0 -13px #FFC43D, -24px 0 0 -13px #FFC43D, -16px -13px 0 -13px #FFC43D, 0 -18px 0 -13px #FFC43D;
+}
 :root[data-theme='ocean'] .nav-icon-main { color: #FF7040; }
 :root[data-theme='ocean'] .nav-item.active .nav-icon-main { filter: drop-shadow(0 0 6px rgba(255, 112, 64, 0.42)); }
 
