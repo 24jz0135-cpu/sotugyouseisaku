@@ -2,9 +2,12 @@
 // Configurations & Global State
 // ==========================================
 const API_BASE_URL = 'https://instant-ledger-backend.yadoran217.workers.dev';
+const LOCAL_FIRST_MODE = true;
+const LOCAL_DB_KEY = 'instant_ledger_local_db';
 
 let appState = {
   isOffline: false,
+  currentReceipt: null,
   records: [],
   currentTab: 'screen-home',
   // 擬似GPS座標（豊洲市場周辺をデフォルトに）
@@ -133,7 +136,13 @@ const documentElements = {
   
   // History
   filterTabs: document.querySelectorAll('.filter-tab'),
-  historyItemsList: document.getElementById('history-items-list')
+  historyItemsList: document.getElementById('history-items-list'),
+  btnExportBackup: document.getElementById('btn-export-backup'),
+  inputRestoreBackup: document.getElementById('input-restore-backup'),
+  receiptModal: document.getElementById('receipt-modal'),
+  receiptModalImage: document.getElementById('receipt-modal-image'),
+  receiptModalEmpty: document.getElementById('receipt-modal-empty'),
+  btnCloseReceiptModal: document.getElementById('btn-close-receipt-modal')
 };
 
 // ==========================================
@@ -154,6 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSensorControls();
   initFormControls();
   initHistoryControls();
+  initLocalVaultControls();
   
   // データの初回取得
   fetchRecords();
@@ -166,6 +176,114 @@ function updateStatusTime() {
   const timeStr = `${hours}:${minutes}`;
   const statusTimeEl = document.getElementById('status-time');
   if (statusTimeEl) statusTimeEl.textContent = timeStr;
+}
+
+// ==========================================
+// Local evidence vault & backup
+// ==========================================
+const receiptVault = {
+  db: null,
+  async open() {
+    if (this.db) return this.db;
+    this.db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('oaiso-local-vault', 1);
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains('receipts')) request.result.createObjectStore('receipts', { keyPath: 'id' });
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    return this.db;
+  },
+  async run(mode, action) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const request = action(db.transaction('receipts', mode).objectStore('receipts'));
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  },
+  put(receipt) { return this.run('readwrite', store => store.put(receipt)); },
+  get(id) { return this.run('readonly', store => store.get(id)); },
+  getAll() { return this.run('readonly', store => store.getAll()); },
+  clear() { return this.run('readwrite', store => store.clear()); }
+};
+
+function localRecords() {
+  return JSON.parse(localStorage.getItem(LOCAL_DB_KEY) || '[]');
+}
+
+function persistLocalRecords(records) {
+  localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(records));
+}
+
+function initLocalVaultControls() {
+  documentElements.btnExportBackup.addEventListener('click', exportBackup);
+  documentElements.inputRestoreBackup.addEventListener('change', restoreBackup);
+  documentElements.btnCloseReceiptModal.addEventListener('click', closeReceiptModal);
+  document.querySelector('[data-close-receipt-modal]').addEventListener('click', closeReceiptModal);
+}
+
+async function exportBackup() {
+  const originalContent = documentElements.btnExportBackup.innerHTML;
+  documentElements.btnExportBackup.disabled = true;
+  documentElements.btnExportBackup.innerHTML = `<i data-lucide="loader" class="spin"></i> 作成中`;
+  lucide.createIcons();
+  try {
+    const archive = {
+      format: 'oaiso-backup',
+      version: 1,
+      createdAt: new Date().toISOString(),
+      records: localRecords(),
+      receipts: await receiptVault.getAll()
+    };
+    const blob = new Blob([JSON.stringify(archive)], { type: 'application/json' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `Oaiso_Backup_${new Date().toISOString().slice(0, 10)}.oaiso`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch (error) {
+    alert(`バックアップを作成できませんでした: ${error.message}`);
+  } finally {
+    documentElements.btnExportBackup.disabled = false;
+    documentElements.btnExportBackup.innerHTML = originalContent;
+    lucide.createIcons();
+  }
+}
+
+async function restoreBackup(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const archive = JSON.parse(await file.text());
+    if (archive.format !== 'oaiso-backup' || !Array.isArray(archive.records) || !Array.isArray(archive.receipts)) throw new Error('Oaisoのバックアップファイルではありません');
+    if (!confirm(`この端末のデータを、${archive.records.length}件のバックアップで置き換えます。続行しますか？`)) return;
+    persistLocalRecords(archive.records);
+    await receiptVault.clear();
+    for (const receipt of archive.receipts) await receiptVault.put(receipt);
+    appState.records = archive.records;
+    renderDashboard();
+    renderHistory();
+    alert('バックアップから復元しました。');
+  } catch (error) {
+    alert(`復元できませんでした: ${error.message}`);
+  } finally {
+    event.target.value = '';
+  }
+}
+
+async function showReceipt(receiptId) {
+  const receipt = await receiptVault.get(receiptId);
+  documentElements.receiptModalImage.classList.toggle('hidden', !receipt);
+  documentElements.receiptModalEmpty.classList.toggle('hidden', Boolean(receipt));
+  if (receipt) documentElements.receiptModalImage.src = receipt.dataUrl;
+  documentElements.receiptModal.classList.remove('hidden');
+}
+
+function closeReceiptModal() {
+  documentElements.receiptModal.classList.add('hidden');
+  documentElements.receiptModalImage.src = '';
 }
 
 function initThemePicker() {
@@ -434,6 +552,12 @@ function capturePhoto() {
     const dataUrl = canvas.toDataURL('image/jpeg');
     capturedImgEl.src = dataUrl;
     capturedImgEl.classList.remove('hidden');
+    appState.currentReceipt = {
+      id: `receipt_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+      dataUrl,
+      createdAt: new Date().toISOString(),
+      mimeType: 'image/jpeg'
+    };
 
     stopCamera();
   } else {
@@ -442,6 +566,7 @@ function capturePhoto() {
       capturedImgEl.src = 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60';
       capturedImgEl.classList.remove('hidden');
     }
+    appState.currentReceipt = null;
     if (placeholderEl) {
       placeholderEl.classList.add('hidden');
     }
@@ -747,13 +872,30 @@ function initSensorControls() {
 function initFormControls() {
   documentElements.btnCancelPreview.addEventListener('click', () => {
     documentElements.factPreviewCard.classList.add('hidden');
+    appState.currentReceipt = null;
     // キャンセルされた場合、カメラタブであればプレビューを再開
     if (appState.sensorType === 'CAMERA') {
       startCamera();
     }
   });
 
-  documentElements.btnSaveFact.addEventListener('click', () => {
+  documentElements.btnSaveFact.addEventListener('click', async () => {
+    const vendorName = documentElements.inputVendor.value.trim();
+    const amount = parseInt(documentElements.inputAmount.value, 10) || 0;
+    if (!vendorName || !amount) {
+      alert("店舗名と金額を入力してください！");
+      return;
+    }
+    let receiptId = null;
+    if (appState.sensorType === 'CAMERA' && appState.currentReceipt) {
+      try {
+        await receiptVault.put(appState.currentReceipt);
+        receiptId = appState.currentReceipt.id;
+      } catch (error) {
+        alert(`レシート画像を端末に保存できませんでした: ${error.message}`);
+        return;
+      }
+    }
     const payload = {
       userId: 'user_shinjuku_001',
       timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
@@ -761,15 +903,11 @@ function initFormControls() {
       longitude: appState.gps.longitude,
       sensorType: appState.sensorType,
       rawText: documentElements.inputRawText.value,
-      amount: parseInt(documentElements.inputAmount.value, 10) || 0,
+      amount,
       category: documentElements.inputCategory.value,
-      vendorName: documentElements.inputVendor.value
+      vendorName,
+      receiptId
     };
-
-    if (!payload.vendorName || !payload.amount) {
-      alert("店舗名と金額を入力してください！");
-      return;
-    }
 
     // 保存ローディング
     documentElements.btnSaveFact.disabled = true;
@@ -806,6 +944,14 @@ function initHistoryControls() {
 
 // 1. レコード一覧の取得
 async function fetchRecords() {
+  if (LOCAL_FIRST_MODE) {
+    appState.isOffline = true;
+    appState.records = localRecords();
+    updateConnectionIndicator('local');
+    renderDashboard();
+    renderHistory();
+    return;
+  }
   try {
     const response = await fetch(`${API_BASE_URL}/api/records`);
     if (!response.ok) throw new Error('サーバーエラー');
@@ -862,7 +1008,7 @@ async function fetchRecords() {
 
 // 2. 経費のアップロード
 async function uploadRecord(payload) {
-  if (appState.isOffline) {
+  if (LOCAL_FIRST_MODE || appState.isOffline) {
     // オフラインモード時の動作シミュレーション
     const newRecord = {
       id: 'local_record_' + Date.now(),
@@ -875,10 +1021,12 @@ async function uploadRecord(payload) {
       amount: payload.amount,
       category: payload.category,
       vendor_name: payload.vendorName,
+      receipt_id: payload.receiptId,
       status: 'PENDING'
     };
     appState.records.unshift(newRecord);
-    localStorage.setItem('instant_ledger_local_db', JSON.stringify(appState.records));
+    persistLocalRecords(appState.records);
+    appState.currentReceipt = null;
     
     setTimeout(() => {
       documentElements.factPreviewCard.classList.add('hidden');
@@ -906,7 +1054,7 @@ async function uploadRecord(payload) {
 
 // 3. レコードの確定 (Verify)
 async function verifyRecord(id) {
-  if (appState.isOffline) {
+  if (LOCAL_FIRST_MODE || appState.isOffline) {
     // オフラインモード時の動作
     appState.records = appState.records.map(rec => {
       if (rec.id === id) {
@@ -914,7 +1062,7 @@ async function verifyRecord(id) {
       }
       return rec;
     });
-    localStorage.setItem('instant_ledger_local_db', JSON.stringify(appState.records));
+    persistLocalRecords(appState.records);
     renderDashboard();
     renderHistory();
     return;
@@ -936,10 +1084,13 @@ async function verifyRecord(id) {
 }
 
 // 接続状態表示の更新 (オンライン/オフライン)
-function updateConnectionIndicator(isOnline) {
+function updateConnectionIndicator(mode) {
   const badge = document.querySelector('.tax-badge');
   if (badge) {
-    if (isOnline) {
+    if (mode === 'local') {
+      badge.style.color = '#10B981';
+      badge.innerHTML = `<i data-lucide="shield-check" class="icon-tiny"></i> 端末内に保存中`;
+    } else if (mode) {
       badge.style.color = '#60A5FA';
       badge.innerHTML = `<i data-lucide="award" class="icon-tiny"></i> 青色申告 (D1接続中)`;
     } else {
@@ -1060,6 +1211,9 @@ function createRecordCard(rec) {
   
   const iconName = rec.sensor_type === 'CAMERA' ? 'camera' : (rec.sensor_type === 'VOICE' ? 'mic' : 'navigation');
   const dateStr = rec.timestamp ? rec.timestamp.substring(5, 16) : '日付不明'; // "MM-DD HH:MM"
+  const receiptHTML = rec.receipt_id
+    ? `<button class="btn-view-receipt" type="button" data-receipt-id="${rec.receipt_id}"><i data-lucide="image" class="icon-tiny"></i> レシートを見る</button>`
+    : '';
 
   let actionHTML = '';
   if (rec.status === 'PENDING') {
@@ -1102,6 +1256,7 @@ function createRecordCard(rec) {
     </div>
     
     ${rec.raw_text ? `<div class="record-extra">${rec.raw_text}</div>` : ''}
+    ${receiptHTML}
     ${actionHTML}
   `;
 
@@ -1118,6 +1273,19 @@ function createRecordCard(rec) {
       lucide.createIcons();
       
       verifyRecord(id);
+    });
+  }
+
+  const receiptBtn = card.querySelector('.btn-view-receipt');
+  if (receiptBtn) {
+    receiptBtn.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      try {
+        await showReceipt(receiptBtn.dataset.receiptId);
+        lucide.createIcons();
+      } catch (error) {
+        alert(`レシート画像を開けませんでした: ${error.message}`);
+      }
     });
   }
 

@@ -615,6 +615,17 @@ body {
   margin-bottom: 12px;
 }
 
+.local-evidence-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 10px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+.local-evidence-note svg { width: 13px; height: 13px; color: var(--color-success); }
+
 /* Fact Preview Form Card */
 .fact-preview-card {
   background: #ffffff;
@@ -740,6 +751,64 @@ body {
   flex-direction: column;
   gap: 10px;
 }
+
+.backup-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-card);
+}
+.backup-panel h3 { font-size: 13px; color: var(--color-text-dark); }
+.backup-panel p { margin-top: 4px; color: var(--color-text-muted); font-size: 10px; line-height: 1.5; }
+.backup-panel code { font-family: var(--font-primary); font-weight: 700; }
+.backup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-backup, .btn-restore, .btn-view-receipt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 9px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-backup { border: 0; color: white; background: var(--gradient-primary); }
+.btn-restore, .btn-view-receipt { border: 1px solid var(--border-color); color: var(--primary); background: transparent; }
+.btn-backup svg, .btn-restore svg, .btn-view-receipt svg { width: 14px; height: 14px; }
+.btn-view-receipt { width: 100%; margin-top: 10px; }
+
+.receipt-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.receipt-modal.hidden { display: none; }
+.receipt-modal-backdrop { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.55); }
+.receipt-modal-content {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 420px);
+  max-height: 88vh;
+  overflow: auto;
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--bg-phone);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.28);
+}
+.receipt-modal-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; }
+.receipt-modal-header h2 { margin-top: 2px; font-size: 17px; color: var(--color-text-dark); }
+.modal-eyebrow { color: var(--color-text-muted); font-size: 10px; font-weight: 700; }
+.receipt-modal-content img { display: block; width: 100%; border-radius: 10px; background: #E2E8F0; }
+.receipt-modal-content > p { padding: 32px 0; color: var(--color-text-muted); text-align: center; font-size: 12px; }
 
 /* Record Item Card */
 .record-item {

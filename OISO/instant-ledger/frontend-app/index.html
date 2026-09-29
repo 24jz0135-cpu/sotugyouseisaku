@@ -159,6 +159,7 @@
                 <span>写真を撮影してOCR解析</span>
               </button>
             </div>
+            <p class="local-evidence-note"><i data-lucide="shield-check"></i> レシート画像はこの端末内に証憑として保存されます</p>
           </div>
 
           <!-- 音声シミュレータ -->
@@ -242,6 +243,17 @@
             <button class="filter-tab" data-filter="VERIFIED">確定済み</button>
           </div>
 
+          <section class="backup-panel" aria-labelledby="backup-title">
+            <div>
+              <h3 id="backup-title">端末バックアップ</h3>
+              <p>会計データと保存済みレシート画像を、PCに <code>.oaiso</code> ファイルとして保存できます。</p>
+            </div>
+            <div class="backup-actions">
+              <button class="btn-backup" id="btn-export-backup" type="button"><i data-lucide="download"></i> バックアップ</button>
+              <label class="btn-restore"><i data-lucide="upload"></i> 復元<input id="input-restore-backup" type="file" accept=".oaiso,application/json" hidden></label>
+            </div>
+          </section>
+
           <div class="history-list" id="history-items-list">
             <!-- JSで動的に描画 -->
             <div class="loading-spinner">
@@ -269,6 +281,18 @@
         </button>
       </nav>
 
+    </div>
+  </div>
+
+  <div class="receipt-modal hidden" id="receipt-modal" role="dialog" aria-modal="true" aria-labelledby="receipt-modal-title">
+    <div class="receipt-modal-backdrop" data-close-receipt-modal></div>
+    <div class="receipt-modal-content">
+      <div class="receipt-modal-header">
+        <div><p class="modal-eyebrow">保存済みの証憑</p><h2 id="receipt-modal-title">レシート画像</h2></div>
+        <button class="btn-close" id="btn-close-receipt-modal" type="button" aria-label="閉じる"><i data-lucide="x"></i></button>
+      </div>
+      <img id="receipt-modal-image" alt="保存済みレシート">
+      <p id="receipt-modal-empty" class="hidden">この端末にはレシート画像がありません。</p>
     </div>
   </div>
 
