@@ -1,0 +1,14 @@
+{
+  "name": "oiso2-bridge",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local-only Discord relay and receipt analysis bridge for OISO2",
+  "scripts": {
+    "start": "node index.mjs",
+    "check": "node --check index.mjs"
+  },
+  "dependencies": {
+    "discord.js": "^14.22.1"
+  }
+}

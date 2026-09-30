@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["records"],
+  "properties": {
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["receiptId", "date", "vendor", "amount", "category", "confidence"],
+        "properties": {
+          "receiptId": { "type": "string" },
+          "date": { "type": ["string", "null"] },
+          "vendor": { "type": ["string", "null"] },
+          "amount": { "type": ["number", "null"] },
+          "category": { "type": ["string", "null"] },
+          "confidence": { "type": ["number", "null"] }
+        }
+      }
+    }
+  }
+}
