@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import QRCode from 'qrcode';
 
 try {
   const envFile = await readFile(resolve(process.cwd(), '.env'), 'utf8');
@@ -60,12 +61,33 @@ async function analyze(ids) {
   return { jobId, records, csv, csvPath, mode: config.analyzer };
 }
 let discordChannel = null;
+const mobileSessions = new Map();
+function expireSession(sessionId) {
+  const session = mobileSessions.get(sessionId);
+  if (!session) return;
+  mobileSessions.delete(sessionId);
+  session.webhook?.delete('OISO mobile relay session expired').catch(() => {});
+}
+async function createMobileSession() {
+  if (!discordChannel?.createWebhook) throw new Error('Discord Bridgeを接続してから一時QRを作成してください');
+  const sessionId = `S-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const webhook = await discordChannel.createWebhook({ name: `OISO-${sessionId}` });
+  const expiresAt = Date.now() + 10 * 60 * 1000;
+  const payload = { format: 'oiso-relay', version: 1, sessionId, uploadUrl: webhook.url, expiresAt };
+  mobileSessions.set(sessionId, { webhook, expiresAt });
+  setTimeout(() => expireSession(sessionId), 10 * 60 * 1000 + 1000).unref();
+  return { ...payload, qrDataUrl: await QRCode.toDataURL(JSON.stringify(payload), { errorCorrectionLevel: 'M', margin: 1, width: 280 }) };
+}
 async function sendResultToDiscord(result) { if (discordChannel) await discordChannel.send({ content: `OISO2解析結果 ${result.jobId}（${result.records.length}件）`, files: [result.csvPath] }); }
 async function bootDiscord() {
   if (!config.token || !config.channelId) { console.log('Discord未設定: ローカルAPIのみを起動します。'); return; }
   const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent], partials: [Partials.Channel] });
   client.once('ready', async () => { discordChannel = await client.channels.fetch(config.channelId); console.log(`Discord Relay接続済み: ${client.user.tag}`); });
-  client.on('messageCreate', async message => { if (message.author.bot || message.channelId !== config.channelId || !message.attachments.size) return; try { const saved = (await Promise.all([...message.attachments.values()].map(saveAttachment))).filter(Boolean); if (saved.length) await message.reply(`OISO2が${saved.length}枚をPCの受信箱へ保存しました。OISO2で確認・解析できます。`); } catch (error) { await message.reply(`受信に失敗しました: ${error.message}`); } });
+  client.on('messageCreate', async message => {
+    const isOisoWebhook = message.webhookId && [...mobileSessions.values()].some(session => session.webhook.id === message.webhookId);
+    if ((!isOisoWebhook && message.author.bot) || message.channelId !== config.channelId || !message.attachments.size) return;
+    try { const saved = (await Promise.all([...message.attachments.values()].map(saveAttachment))).filter(Boolean); if (saved.length && !isOisoWebhook) await message.reply(`OISO2が${saved.length}枚をPCの受信箱へ保存しました。OISO2で確認・解析できます。`); } catch (error) { if (!isOisoWebhook) await message.reply(`受信に失敗しました: ${error.message}`); }
+  });
   await client.login(config.token);
 }
 function json(response, status, body) { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174' }); response.end(JSON.stringify(body)); }
@@ -74,6 +96,7 @@ const server = createServer(async (request, response) => {
   if (request.method === 'OPTIONS') { response.writeHead(204, { 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174', 'Access-Control-Allow-Methods': 'GET,POST' }); return response.end(); }
   try { const url = new URL(request.url, `http://${request.headers.host}`);
     if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { ok: true, discord: Boolean(discordChannel), analyzer: config.analyzer });
+    if (request.method === 'POST' && url.pathname === '/api/mobile-sessions') return json(response, 200, await createMobileSession());
     if (request.method === 'GET' && url.pathname === '/api/inbox') return json(response, 200, { receipts: await listInbox() });
     if (request.method === 'GET' && url.pathname.startsWith('/api/files/')) { const file = basename(decodeURIComponent(url.pathname.slice('/api/files/'.length))); const data = await readFile(join(inbox, file)); response.writeHead(200, { 'Content-Type': mimeFor(file), 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174' }); return response.end(data); }
     if (request.method === 'POST' && url.pathname === '/api/analyze') { const body = await parseBody(request); const result = await analyze(Array.isArray(body.ids) ? body.ids : []); await sendResultToDiscord(result); return json(response, 200, { jobId: result.jobId, records: result.records, csv: result.csv, mode: result.mode, sentToDiscord: Boolean(discordChannel) }); }

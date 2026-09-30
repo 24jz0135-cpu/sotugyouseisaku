@@ -10,6 +10,10 @@ Discordを受信箱として使い、添付されたレシート画像をこのP
 4. このフォルダで `npm install`、続けて `npm start` を実行します。
 5. OISO2を `http://127.0.0.1:4174/` で開き、「Bridgeの受信箱を取り込む」を押します。
 
+## スマホから送る
+
+Discord接続済みのOISO2で「スマホ送信用QRを作成」を押し、OISOの履歴画面にある「PCへ送信（Relay）」から読み取ります。QRは送信専用の一時Webhook URLで、10分後にPC Bridgeが削除します。BotトークンはQRにもスマホにも渡りません。
+
 ## 解析モード
 
 - `ANALYZER_MODE=mock` はCSVまでの配送・編集を検証する安全な初期設定です。
