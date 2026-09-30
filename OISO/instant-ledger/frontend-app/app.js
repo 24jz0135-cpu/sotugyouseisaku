@@ -139,6 +139,7 @@ const documentElements = {
   historyItemsList: document.getElementById('history-items-list'),
   btnExportBackup: document.getElementById('btn-export-backup'),
   inputRestoreBackup: document.getElementById('input-restore-backup'),
+  inputQuickReceipt: document.getElementById('input-quick-receipt'),
   receiptModal: document.getElementById('receipt-modal'),
   receiptModalImage: document.getElementById('receipt-modal-image'),
   receiptModalEmpty: document.getElementById('receipt-modal-empty'),
@@ -220,8 +221,29 @@ function persistLocalRecords(records) {
 function initLocalVaultControls() {
   documentElements.btnExportBackup.addEventListener('click', exportBackup);
   documentElements.inputRestoreBackup.addEventListener('change', restoreBackup);
+  documentElements.inputQuickReceipt.addEventListener('change', saveQuickReceipt);
   documentElements.btnCloseReceiptModal.addEventListener('click', closeReceiptModal);
   document.querySelector('[data-close-receipt-modal]').addEventListener('click', closeReceiptModal);
+}
+
+async function saveQuickReceipt(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    if (!file.type.startsWith('image/')) throw new Error('画像ファイルを選んでください');
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    await receiptVault.put({ id: `receipt_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`, dataUrl, mimeType: file.type, capturedAt: new Date().toISOString() });
+    alert('レシート画像をこの端末に保管しました。履歴画面の「PCへ送信（Relay）」から、あとでまとめて送れます。');
+  } catch (error) {
+    alert(`レシート画像を保存できませんでした: ${error.message}`);
+  } finally {
+    event.target.value = '';
+  }
 }
 
 async function exportBackup() {

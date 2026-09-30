@@ -243,6 +243,16 @@
             <button class="filter-tab" data-filter="VERIFIED">確定済み</button>
           </div>
 
+          <section class="backup-panel" aria-labelledby="receipt-upload-title">
+            <div>
+              <h3 id="receipt-upload-title">レシートを端末に追加</h3>
+              <p>撮影した画像はスマホ内に保管し、あとでPCのOISO2へまとめて送ります。スマホ側ではAI解析しません。</p>
+            </div>
+            <div class="backup-actions">
+              <label class="btn-backup"><i data-lucide="camera"></i> 写真を追加<input id="input-quick-receipt" type="file" accept="image/*" capture="environment" hidden></label>
+            </div>
+          </section>
+
           <section class="backup-panel" aria-labelledby="backup-title">
             <div>
               <h3 id="backup-title">端末バックアップ</h3>
@@ -270,10 +280,6 @@
         <button class="nav-item active" data-target="screen-home">
           <i data-lucide="layout-dashboard"></i>
           <span>ホーム</span>
-        </button>
-        <button class="nav-item" data-target="screen-scan">
-          <i data-lucide="plus-circle" class="nav-icon-main"></i>
-          <span>現場で記録</span>
         </button>
         <button class="nav-item" data-target="screen-history">
           <i data-lucide="receipt"></i>
