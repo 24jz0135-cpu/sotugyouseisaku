@@ -17,7 +17,7 @@ try {
   }
 } catch { /* .env is optional; process environment variables also work. */ }
 
-const config = { token: process.env.DISCORD_BOT_TOKEN, channelId: process.env.DISCORD_CHANNEL_ID, port: Number(process.env.PORT || 8788), analyzer: process.env.ANALYZER_MODE || 'mock', codex: process.env.CODEX_COMMAND || 'codex' };
+const config = { token: process.env.DISCORD_BOT_TOKEN, channelId: process.env.DISCORD_CHANNEL_ID, port: Number(process.env.PORT || 8788), analyzer: process.env.ANALYZER_MODE || 'mock', codex: process.env.CODEX_COMMAND || 'codex', autoAnalyze: process.env.AUTO_ANALYZE === 'true' };
 const root = resolve(process.cwd(), 'bridge-data');
 const inbox = join(root, 'inbox');
 const results = join(root, 'results');
@@ -61,6 +61,8 @@ async function analyze(ids) {
   return { jobId, records, csv, csvPath, mode: config.analyzer };
 }
 let discordChannel = null;
+let analysisQueue = Promise.resolve();
+const jobs = new Map();
 const mobileSessions = new Map();
 function expireSession(sessionId) {
   const session = mobileSessions.get(sessionId);
@@ -79,6 +81,16 @@ async function createMobileSession() {
   return { ...payload, qrDataUrl: await QRCode.toDataURL(JSON.stringify(payload), { errorCorrectionLevel: 'M', margin: 1, width: 280 }) };
 }
 async function sendResultToDiscord(result) { if (discordChannel) await discordChannel.send({ content: `OISO2解析結果 ${result.jobId}（${result.records.length}件）`, files: [result.csvPath] }); }
+function queueReceiptAnalysis(ids) {
+  const jobId = `queue-${Date.now()}-${randomUUID().slice(0, 4)}`;
+  jobs.set(jobId, { id: jobId, ids, status: 'queued', createdAt: new Date().toISOString() });
+  analysisQueue = analysisQueue.catch(() => {}).then(async () => {
+    const job = jobs.get(jobId); job.status = 'running'; job.startedAt = new Date().toISOString();
+    try { const result = await analyze(ids); await sendResultToDiscord(result); Object.assign(job, { status: 'completed', completedAt: new Date().toISOString(), resultId: result.jobId }); }
+    catch (error) { Object.assign(job, { status: 'failed', completedAt: new Date().toISOString(), error: error.message }); if (discordChannel) await discordChannel.send(`OISO2解析失敗（${jobId}）: ${error.message}`); }
+  });
+  return jobId;
+}
 async function bootDiscord() {
   if (!config.token || !config.channelId) { console.log('Discord未設定: ローカルAPIのみを起動します。'); return; }
   const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent], partials: [Partials.Channel] });
@@ -86,7 +98,14 @@ async function bootDiscord() {
   client.on('messageCreate', async message => {
     const isOisoWebhook = message.webhookId && [...mobileSessions.values()].some(session => session.webhook.id === message.webhookId);
     if ((!isOisoWebhook && message.author.bot) || message.channelId !== config.channelId || !message.attachments.size) return;
-    try { const saved = (await Promise.all([...message.attachments.values()].map(saveAttachment))).filter(Boolean); if (saved.length && !isOisoWebhook) await message.reply(`OISO2が${saved.length}枚をPCの受信箱へ保存しました。OISO2で確認・解析できます。`); } catch (error) { if (!isOisoWebhook) await message.reply(`受信に失敗しました: ${error.message}`); }
+    try {
+      const saved = (await Promise.all([...message.attachments.values()].map(saveAttachment))).filter(Boolean);
+      if (!saved.length) return;
+      if (config.autoAnalyze) {
+        const jobId = queueReceiptAnalysis(saved.map(file => file.id));
+        if (!isOisoWebhook) await message.reply(`OISO2が${saved.length}枚を受信し、固定のレシート解析ジョブ ${jobId} をキューへ追加しました。`);
+      } else if (!isOisoWebhook) await message.reply(`OISO2が${saved.length}枚をPCの受信箱へ保存しました。OISO2で確認・解析できます。`);
+    } catch (error) { if (!isOisoWebhook) await message.reply(`受信に失敗しました: ${error.message}`); }
   });
   await client.login(config.token);
 }
@@ -95,7 +114,8 @@ function parseBody(request) { return new Promise((resolveBody, reject) => { let 
 const server = createServer(async (request, response) => {
   if (request.method === 'OPTIONS') { response.writeHead(204, { 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174', 'Access-Control-Allow-Methods': 'GET,POST' }); return response.end(); }
   try { const url = new URL(request.url, `http://${request.headers.host}`);
-    if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { ok: true, discord: Boolean(discordChannel), analyzer: config.analyzer });
+    if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { ok: true, discord: Boolean(discordChannel), analyzer: config.analyzer, autoAnalyze: config.autoAnalyze });
+    if (request.method === 'GET' && url.pathname === '/api/jobs') return json(response, 200, { jobs: [...jobs.values()].slice(-20).reverse() });
     if (request.method === 'POST' && url.pathname === '/api/mobile-sessions') return json(response, 200, await createMobileSession());
     if (request.method === 'GET' && url.pathname === '/api/inbox') return json(response, 200, { receipts: await listInbox() });
     if (request.method === 'GET' && url.pathname.startsWith('/api/files/')) { const file = basename(decodeURIComponent(url.pathname.slice('/api/files/'.length))); const data = await readFile(join(inbox, file)); response.writeHead(200, { 'Content-Type': mimeFor(file), 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174' }); return response.end(data); }

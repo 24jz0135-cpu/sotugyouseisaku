@@ -19,4 +19,6 @@ Discord接続済みのOISO2で「スマホ送信用QRを作成」を押し、OIS
 - `ANALYZER_MODE=mock` はCSVまでの配送・編集を検証する安全な初期設定です。
 - `ANALYZER_MODE=codex` は、このPCでサインイン済みの `codex` を起動します。画像を添付し、`schema.json` に沿うJSONを作らせます。利用者自身のCodex/ChatGPT利用枠を使います。
 
+`AUTO_ANALYZE=true` にすると、Discordから受信した画像をFIFOキューへ追加し、完了時にCSVを同じDiscordチャンネルへ返します。受け付けるのは画像だけで、Discordの自由文をCodexやシェルへ渡すことはありません。まずは `false` のまま受信・手動解析を確認してから有効にしてください。
+
 Bridgeは `127.0.0.1` だけで待ち受けます。外部ネットワークへ受信箱を公開しません。
