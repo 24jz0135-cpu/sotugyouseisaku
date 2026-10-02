@@ -110,6 +110,36 @@ const documentElements = {
   btnTheme: document.getElementById('btn-theme'),
   themeMenu: document.getElementById('theme-menu'),
   themeOptions: document.querySelectorAll('.theme-option'),
+  btnThemeSettings: document.getElementById('btn-theme-settings'),
+  btnSettingsBack: document.getElementById('btn-settings-back'),
+  photoPickerModal: document.getElementById('photo-picker-modal'),
+  btnClosePhotoPicker: document.getElementById('btn-close-photo-picker'),
+  inputThemePhoto: document.getElementById('input-theme-photo'),
+  savedPhotoGrid: document.getElementById('saved-photo-grid'),
+  photoLibraryEmpty: document.getElementById('photo-library-empty'),
+  photoPickerStatus: document.getElementById('photo-picker-status'),
+  photoSelectionPreview: document.getElementById('photo-selection-preview'),
+  photoSelectionImage: document.getElementById('photo-selection-image'),
+  photoSelectionName: document.getElementById('photo-selection-name'),
+  btnApplySelectedPhoto: document.getElementById('btn-apply-selected-photo'),
+  photoCropModal: document.getElementById('photo-crop-modal'),
+  photoCropCanvas: document.getElementById('photo-crop-canvas'),
+  photoCropZoom: document.getElementById('photo-crop-zoom'),
+  photoCropStatus: document.getElementById('photo-crop-status'),
+  btnCancelPhotoCrop: document.getElementById('btn-cancel-photo-crop'),
+  btnCancelPhotoCropText: document.getElementById('btn-cancel-photo-crop-text'),
+  btnSavePhotoCrop: document.getElementById('btn-save-photo-crop'),
+  photoTargetButtons: document.querySelectorAll('[data-photo-target]'),
+  photoResetButtons: document.querySelectorAll('[data-photo-reset]'),
+  toggleBackgroundPhotoDim: document.getElementById('toggle-background-photo-dim'),
+  toggleWidgetPhotoDim: document.getElementById('toggle-widget-photo-dim'),
+  widgetPhotoDimTitle: document.getElementById('widget-photo-dim-title'),
+  selectPhotoWidget: document.getElementById('select-photo-widget'),
+  inputThemePresetName: document.getElementById('input-theme-preset-name'),
+  btnSaveThemePreset: document.getElementById('btn-save-theme-preset'),
+  themePresetStatus: document.getElementById('theme-preset-status'),
+  themePresetList: document.getElementById('theme-preset-list'),
+  themePresetEmpty: document.getElementById('theme-preset-empty'),
 
   // Sensors (Scan/Voice)
   tabCamera: document.getElementById('tab-camera'),
@@ -139,7 +169,6 @@ const documentElements = {
   historyItemsList: document.getElementById('history-items-list'),
   btnExportBackup: document.getElementById('btn-export-backup'),
   inputRestoreBackup: document.getElementById('input-restore-backup'),
-  inputQuickReceipt: document.getElementById('input-quick-receipt'),
   receiptModal: document.getElementById('receipt-modal'),
   receiptModalImage: document.getElementById('receipt-modal-image'),
   receiptModalEmpty: document.getElementById('receipt-modal-empty'),
@@ -158,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(updateStatusTime, 60000);
 
   initThemePicker();
+  initThemePhotos();
 
   // イベントリスナー登録
   initNavigation();
@@ -221,29 +251,8 @@ function persistLocalRecords(records) {
 function initLocalVaultControls() {
   documentElements.btnExportBackup.addEventListener('click', exportBackup);
   documentElements.inputRestoreBackup.addEventListener('change', restoreBackup);
-  documentElements.inputQuickReceipt.addEventListener('change', saveQuickReceipt);
   documentElements.btnCloseReceiptModal.addEventListener('click', closeReceiptModal);
   document.querySelector('[data-close-receipt-modal]').addEventListener('click', closeReceiptModal);
-}
-
-async function saveQuickReceipt(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  try {
-    if (!file.type.startsWith('image/')) throw new Error('画像ファイルを選んでください');
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(file);
-    });
-    await receiptVault.put({ id: `receipt_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`, dataUrl, mimeType: file.type, capturedAt: new Date().toISOString() });
-    alert('レシート画像をこの端末に保管しました。履歴画面の「PCへ送信（Relay）」から、あとでまとめて送れます。');
-  } catch (error) {
-    alert(`レシート画像を保存できませんでした: ${error.message}`);
-  } finally {
-    event.target.value = '';
-  }
 }
 
 async function exportBackup() {
@@ -326,6 +335,15 @@ function initThemePicker() {
     option.classList.toggle('active', option.dataset.theme === getCurrentTheme());
     option.addEventListener('click', () => applyTheme(option.dataset.theme));
   });
+  documentElements.btnThemeSettings.addEventListener('click', () => {
+    closeMenu();
+    switchTab('screen-theme-settings');
+  });
+  documentElements.btnSettingsBack.addEventListener('click', () => {
+    documentElements.themeMenu.classList.remove('hidden');
+    documentElements.btnTheme.setAttribute('aria-expanded', 'true');
+    switchTab('screen-home');
+  });
   documentElements.btnTheme.addEventListener('click', event => {
     event.stopPropagation();
     const isOpen = !documentElements.themeMenu.classList.contains('hidden');
@@ -338,6 +356,596 @@ function initThemePicker() {
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') closeMenu();
   });
+}
+
+// ==========================================
+// Theme photo library (device-local IndexedDB)
+// ==========================================
+const THEME_PHOTO_DB = 'instant-ledger-theme-photos';
+const THEME_PHOTO_STORE = 'photos';
+let activePhotoTarget = 'background';
+let themePhotoObjectUrls = new Map();
+let pendingThemePhoto = null;
+let photoCropState = null;
+
+function openThemePhotoDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(THEME_PHOTO_DB, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(THEME_PHOTO_STORE)) {
+        db.createObjectStore(THEME_PHOTO_STORE, { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function withThemePhotoStore(mode, operation) {
+  const db = await openThemePhotoDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(THEME_PHOTO_STORE, mode);
+    const store = transaction.objectStore(THEME_PHOTO_STORE);
+    const request = operation(store);
+    transaction.oncomplete = () => { db.close(); resolve(request?.result); };
+    transaction.onerror = () => { db.close(); reject(transaction.error); };
+    transaction.onabort = () => { db.close(); reject(transaction.error); };
+  });
+}
+
+function initThemePhotos() {
+  documentElements.btnSaveThemePreset.addEventListener('click', saveCurrentThemePreset);
+  renderThemePresets();
+  const savedDimSetting = localStorage.getItem('instant-ledger-background-photo-dim');
+  documentElements.toggleBackgroundPhotoDim.checked = savedDimSetting !== 'false';
+  documentElements.toggleBackgroundPhotoDim.addEventListener('change', () => {
+    localStorage.setItem('instant-ledger-background-photo-dim', String(documentElements.toggleBackgroundPhotoDim.checked));
+    restoreThemePhotoAssignments().catch(error => console.warn('背景写真の表示設定を反映できませんでした:', error));
+  });
+  documentElements.toggleWidgetPhotoDim.checked = getSelectedWidgetDimSetting();
+  documentElements.toggleWidgetPhotoDim.addEventListener('change', () => {
+    const settings = JSON.parse(localStorage.getItem('instant-ledger-widget-photo-dim-settings') || '{}');
+    settings[documentElements.selectPhotoWidget.value] = documentElements.toggleWidgetPhotoDim.checked;
+    localStorage.setItem('instant-ledger-widget-photo-dim-settings', JSON.stringify(settings));
+    restoreThemePhotoAssignments().catch(error => console.warn('ウィジェット写真の表示設定を反映できませんでした:', error));
+  });
+
+  documentElements.photoTargetButtons.forEach(button => {
+    button.addEventListener('click', async () => {
+      activePhotoTarget = button.dataset.photoTarget;
+      if (activePhotoTarget === 'widget') activePhotoTarget = `widget:${documentElements.selectPhotoWidget.value}`;
+      const title = activePhotoTarget === 'background' ? '背景に使う写真' : 'ウィジェットに使う写真';
+      document.getElementById('photo-picker-title').textContent = title;
+      documentElements.photoPickerStatus.textContent = '';
+      pendingThemePhoto = null;
+      documentElements.photoSelectionPreview.classList.add('hidden');
+      documentElements.photoPickerModal.classList.remove('hidden');
+      await renderSavedThemePhotos();
+    });
+  });
+  documentElements.photoResetButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const target = button.dataset.photoReset === 'widget' ? `widget:${documentElements.selectPhotoWidget.value}` : button.dataset.photoReset;
+      resetThemePhoto(target);
+    });
+  });
+  documentElements.selectPhotoWidget.addEventListener('change', updateSelectedWidgetSettings);
+  updateSelectedWidgetSettings();
+
+  documentElements.inputThemePhoto.addEventListener('change', async event => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      documentElements.photoPickerStatus.textContent = '画像ファイルを選択してください。';
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      documentElements.photoPickerStatus.textContent = '写真は15MB以下のファイルを選択してください。';
+      return;
+    }
+    try {
+      const hash = await hashThemePhoto(file);
+      const savedPhotos = (await withThemePhotoStore('readonly', store => store.getAll())).filter(photo => !photo.derived);
+      const duplicate = await findDuplicateThemePhoto(savedPhotos, hash);
+      if (duplicate) {
+        documentElements.photoPickerStatus.textContent = '同じ写真は保存済みです。保存済みの写真を使用します。';
+        selectThemePhotoCandidate(duplicate);
+      } else {
+        const photo = { id: crypto.randomUUID(), name: file.name, blob: file, hash, createdAt: Date.now() };
+        await withThemePhotoStore('readwrite', store => store.put(photo));
+        await renderSavedThemePhotos();
+        selectThemePhotoCandidate(photo);
+      }
+    } catch (error) {
+      documentElements.photoPickerStatus.textContent = `写真を保存できませんでした: ${error.message}`;
+    }
+  });
+
+  documentElements.btnClosePhotoPicker.addEventListener('click', closeThemePhotoPicker);
+  documentElements.btnApplySelectedPhoto.addEventListener('click', async () => {
+    if (!pendingThemePhoto) return;
+    await openPhotoCropper(pendingThemePhoto);
+  });
+  documentElements.btnCancelPhotoCrop.addEventListener('click', closePhotoCropper);
+  documentElements.btnCancelPhotoCropText.addEventListener('click', closePhotoCropper);
+  documentElements.photoCropZoom.addEventListener('input', () => {
+    if (!photoCropState) return;
+    photoCropState.zoom = Number(documentElements.photoCropZoom.value);
+    drawPhotoCrop();
+  });
+  documentElements.photoCropCanvas.addEventListener('pointerdown', startPhotoCropDrag);
+  documentElements.photoCropCanvas.addEventListener('pointermove', movePhotoCropDrag);
+  documentElements.photoCropCanvas.addEventListener('pointerup', endPhotoCropDrag);
+  documentElements.photoCropCanvas.addEventListener('pointercancel', endPhotoCropDrag);
+  documentElements.btnSavePhotoCrop.addEventListener('click', savePhotoCrop);
+  document.querySelectorAll('[data-close-photo-picker]').forEach(button => button.addEventListener('click', closeThemePhotoPicker));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      if (!documentElements.photoCropModal.classList.contains('hidden')) closePhotoCropper();
+      else closeThemePhotoPicker();
+    }
+  });
+  restoreThemePhotoAssignments().catch(error => console.warn('テーマ写真を読み込めませんでした:', error));
+}
+
+const THEME_PRESETS_KEY = 'instant-ledger-theme-presets';
+
+function readThemePresets() {
+  try {
+    const presets = JSON.parse(localStorage.getItem(THEME_PRESETS_KEY) || '[]');
+    return Array.isArray(presets) ? presets : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCurrentThemePreset() {
+  const name = documentElements.inputThemePresetName.value.trim();
+  if (!name) {
+    documentElements.themePresetStatus.textContent = '設定の名前を入力してください。';
+    documentElements.inputThemePresetName.focus();
+    return;
+  }
+
+  const presets = readThemePresets();
+  presets.unshift({
+    id: crypto.randomUUID(),
+    name,
+    savedAt: Date.now(),
+    assignments: JSON.parse(localStorage.getItem('instant-ledger-theme-photo-assignments') || '{}'),
+    backgroundDim: documentElements.toggleBackgroundPhotoDim.checked,
+    widgetDimSettings: getAllWidgetDimSettings(),
+    theme: localStorage.getItem('instant-ledger-theme') || 'light'
+  });
+  localStorage.setItem(THEME_PRESETS_KEY, JSON.stringify(presets));
+  documentElements.inputThemePresetName.value = '';
+  documentElements.themePresetStatus.textContent = `「${name}」を保存しました。`;
+  renderThemePresets();
+}
+
+function renderThemePresets() {
+  const presets = readThemePresets();
+  documentElements.themePresetList.replaceChildren();
+  documentElements.themePresetEmpty.classList.toggle('hidden', presets.length > 0);
+
+  presets.forEach(preset => {
+    const item = document.createElement('article');
+    item.className = 'theme-preset-item';
+    const info = document.createElement('div');
+    info.className = 'theme-preset-info';
+    const title = document.createElement('strong');
+    title.textContent = preset.name;
+    const date = document.createElement('small');
+    date.textContent = new Date(preset.savedAt).toLocaleDateString('ja-JP');
+    info.append(title, date);
+
+    const actions = document.createElement('div');
+    actions.className = 'theme-preset-actions';
+    const apply = document.createElement('button');
+    apply.type = 'button';
+    apply.className = 'theme-preset-apply';
+    apply.textContent = '適用';
+    apply.addEventListener('click', () => applyThemePreset(preset));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'theme-preset-delete';
+    remove.textContent = '削除';
+    remove.setAttribute('aria-label', `${preset.name}を削除`);
+    remove.addEventListener('click', () => deleteThemePreset(preset.id));
+    actions.append(apply, remove);
+    item.append(info, actions);
+    documentElements.themePresetList.append(item);
+  });
+}
+
+function applyThemePreset(preset) {
+  document.querySelector('.app-content').style.backgroundImage = '';
+  document.querySelector('.app-content').style.backgroundSize = '';
+  document.querySelector('.app-content').style.backgroundPosition = '';
+  document.querySelectorAll('[data-photo-widget]').forEach(widget => {
+    widget.style.backgroundImage = '';
+    widget.style.backgroundSize = '';
+    widget.style.backgroundPosition = '';
+  });
+  document.querySelector('[data-photo-target="background"]').textContent = '写真を選ぶ';
+  document.querySelector('[data-photo-reset="background"]').classList.add('hidden');
+  document.querySelector('[data-photo-target="widget"]').textContent = '写真を選ぶ';
+  document.querySelector('[data-photo-reset="widget"]').classList.add('hidden');
+  localStorage.setItem('instant-ledger-theme-photo-assignments', JSON.stringify(preset.assignments || {}));
+  localStorage.setItem('instant-ledger-background-photo-dim', String(preset.backgroundDim !== false));
+  localStorage.setItem('instant-ledger-widget-photo-dim-settings', JSON.stringify(preset.widgetDimSettings || {}));
+  localStorage.setItem('instant-ledger-theme', preset.theme || 'light');
+
+  if (preset.theme && preset.theme !== 'light') document.documentElement.dataset.theme = preset.theme;
+  else delete document.documentElement.dataset.theme;
+  documentElements.themeOptions.forEach(option => option.classList.toggle('active', option.dataset.theme === (preset.theme || 'light')));
+  documentElements.toggleBackgroundPhotoDim.checked = preset.backgroundDim !== false;
+  documentElements.toggleWidgetPhotoDim.checked = getSelectedWidgetDimSetting();
+  updateSelectedWidgetSettings();
+  restoreThemePhotoAssignments()
+    .then(() => { documentElements.themePresetStatus.textContent = `「${preset.name}」を適用しました。`; })
+    .catch(error => { documentElements.themePresetStatus.textContent = `設定を適用できませんでした: ${error.message}`; });
+}
+
+function deleteThemePreset(id) {
+  const presets = readThemePresets().filter(preset => preset.id !== id);
+  localStorage.setItem(THEME_PRESETS_KEY, JSON.stringify(presets));
+  documentElements.themePresetStatus.textContent = '保存した設定を削除しました。';
+  renderThemePresets();
+}
+
+async function hashThemePhoto(blob) {
+  const bytes = await blob.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function findDuplicateThemePhoto(photos, hash) {
+  for (const photo of photos) {
+    const existingHash = photo.hash || await hashThemePhoto(photo.blob);
+    if (existingHash === hash) return photo;
+  }
+  return null;
+}
+
+function closeThemePhotoPicker() {
+  documentElements.photoPickerModal.classList.add('hidden');
+}
+
+async function renderSavedThemePhotos() {
+  const photos = (await withThemePhotoStore('readonly', store => store.getAll())).filter(photo => !photo.derived);
+  documentElements.savedPhotoGrid.replaceChildren();
+  documentElements.photoLibraryEmpty.classList.toggle('hidden', photos.length > 0);
+  photos.sort((a, b) => b.createdAt - a.createdAt).forEach(photo => {
+    let url = themePhotoObjectUrls.get(photo.id);
+    if (!url) {
+      url = URL.createObjectURL(photo.blob);
+      themePhotoObjectUrls.set(photo.id, url);
+    }
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'saved-photo-item';
+    button.dataset.photoId = photo.id;
+    button.title = photo.name;
+    button.innerHTML = `<img alt=""><span></span>`;
+    button.querySelector('img').src = url;
+    button.querySelector('span').textContent = photo.name;
+    button.addEventListener('click', () => selectThemePhotoCandidate(photo));
+    documentElements.savedPhotoGrid.append(button);
+  });
+}
+
+function selectThemePhotoCandidate(photo) {
+  let url = themePhotoObjectUrls.get(photo.id);
+  if (!url) {
+    url = URL.createObjectURL(photo.blob);
+    themePhotoObjectUrls.set(photo.id, url);
+  }
+  pendingThemePhoto = photo;
+  documentElements.savedPhotoGrid.querySelectorAll('.saved-photo-item').forEach(item => {
+    item.classList.toggle('selected', item.dataset.photoId === photo.id);
+  });
+  const candidate = document.querySelector(`.saved-photo-item[data-photo-id="${photo.id}"]`);
+  if (candidate) candidate.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  documentElements.photoSelectionImage.src = url;
+  documentElements.photoSelectionName.textContent = photo.name;
+  documentElements.photoSelectionPreview.classList.remove('hidden');
+  documentElements.photoPickerStatus.textContent = 'プレビューを確認してから適用してください。';
+}
+
+async function openPhotoCropper(photo) {
+  let url = themePhotoObjectUrls.get(photo.id);
+  if (!url) {
+    url = URL.createObjectURL(photo.blob);
+    themePhotoObjectUrls.set(photo.id, url);
+  }
+  const image = new Image();
+  image.src = url;
+  try {
+    await image.decode();
+  } catch {
+    documentElements.photoPickerStatus.textContent = '写真を開けませんでした。別の画像を選んでください。';
+    return;
+  }
+
+  photoCropState = { photo, image, zoom: 1, centerX: 0, centerY: 0, dragging: false, initialized: false };
+  documentElements.photoCropZoom.value = '1';
+  documentElements.photoCropStatus.textContent = '';
+  documentElements.photoCropModal.classList.remove('hidden');
+  requestAnimationFrame(() => {
+    const geometry = getPhotoCropGeometry();
+    photoCropState.centerX = geometry.width / 2;
+    photoCropState.centerY = geometry.height / 2;
+    photoCropState.initialized = true;
+    drawPhotoCrop();
+  });
+}
+
+function getPhotoCropAspectRatio() {
+  if (activePhotoTarget === 'background') return 0.56;
+  const widgetId = activePhotoTarget.slice('widget:'.length);
+  if (widgetId === 'pending' || widgetId === 'verified') return 1.55;
+  if (widgetId === 'total') return 2.35;
+  return 2.5;
+}
+
+function getPhotoCropGeometry() {
+  const canvas = documentElements.photoCropCanvas;
+  const width = canvas.clientWidth || canvas.parentElement.clientWidth || 320;
+  const height = canvas.clientHeight || 300;
+  const aspect = getPhotoCropAspectRatio();
+  const image = photoCropState.image;
+  const baseScale = Math.min(width * 0.86 / image.naturalWidth, height * 0.78 / image.naturalHeight);
+  const imageWidth = image.naturalWidth * baseScale;
+  const imageHeight = image.naturalHeight * baseScale;
+  let cropWidth = Math.min(width * 0.76, imageWidth * 0.9, imageHeight * 0.9 * aspect);
+  let cropHeight = cropWidth / aspect;
+  if (cropHeight > imageHeight * 0.9) {
+    cropHeight = imageHeight * 0.9;
+    cropWidth = cropHeight * aspect;
+  }
+  return { width, height, cropX: (width - cropWidth) / 2, cropY: (height - cropHeight) / 2, cropWidth, cropHeight, baseScale };
+}
+
+function constrainPhotoCropPosition(geometry) {
+  const state = photoCropState;
+  const scale = geometry.baseScale * state.zoom;
+  const imageWidth = state.image.naturalWidth * scale;
+  const imageHeight = state.image.naturalHeight * scale;
+  state.centerX = Math.min(geometry.cropX + geometry.cropWidth / 2, Math.max(geometry.cropX + geometry.cropWidth - imageWidth / 2, state.centerX));
+  state.centerY = Math.min(geometry.cropY + geometry.cropHeight / 2, Math.max(geometry.cropY + geometry.cropHeight - imageHeight / 2, state.centerY));
+  return { scale, imageWidth, imageHeight };
+}
+
+function drawPhotoCrop() {
+  if (!photoCropState || documentElements.photoCropModal.classList.contains('hidden')) return;
+  const canvas = documentElements.photoCropCanvas;
+  const geometry = getPhotoCropGeometry();
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.round(geometry.width * ratio);
+  canvas.height = Math.round(geometry.height * ratio);
+  const context = canvas.getContext('2d');
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.fillStyle = '#172033';
+  context.fillRect(0, 0, geometry.width, geometry.height);
+
+  const image = photoCropState.image;
+  const { scale, imageWidth, imageHeight } = constrainPhotoCropPosition(geometry);
+  const imageX = photoCropState.centerX - imageWidth / 2;
+  const imageY = photoCropState.centerY - imageHeight / 2;
+  context.drawImage(image, imageX, imageY, imageWidth, imageHeight);
+
+  context.fillStyle = 'rgba(0, 0, 0, .58)';
+  const cropRight = geometry.cropX + geometry.cropWidth;
+  const cropBottom = geometry.cropY + geometry.cropHeight;
+  context.fillRect(0, 0, geometry.width, geometry.cropY);
+  context.fillRect(0, cropBottom, geometry.width, geometry.height - cropBottom);
+  context.fillRect(0, geometry.cropY, geometry.cropX, geometry.cropHeight);
+  context.fillRect(cropRight, geometry.cropY, geometry.width - cropRight, geometry.cropHeight);
+  context.strokeStyle = 'rgba(0, 0, 0, .65)';
+  context.lineWidth = 4;
+  context.strokeRect(geometry.cropX, geometry.cropY, geometry.cropWidth, geometry.cropHeight);
+  context.strokeStyle = '#fff';
+  context.lineWidth = 2;
+  context.strokeRect(geometry.cropX, geometry.cropY, geometry.cropWidth, geometry.cropHeight);
+  context.fillStyle = '#fff';
+  const handle = 8;
+  [[geometry.cropX, geometry.cropY], [geometry.cropX + geometry.cropWidth, geometry.cropY], [geometry.cropX, geometry.cropY + geometry.cropHeight], [geometry.cropX + geometry.cropWidth, geometry.cropY + geometry.cropHeight]].forEach(([x, y]) => {
+    context.fillRect(x - handle / 2, y - handle / 2, handle, handle);
+  });
+  photoCropState.geometry = geometry;
+  photoCropState.imageScale = scale;
+  photoCropState.imageX = imageX;
+  photoCropState.imageY = imageY;
+}
+
+function startPhotoCropDrag(event) {
+  if (!photoCropState) return;
+  photoCropState.dragging = true;
+  photoCropState.lastPointerX = event.clientX;
+  photoCropState.lastPointerY = event.clientY;
+  documentElements.photoCropCanvas.setPointerCapture(event.pointerId);
+}
+
+function movePhotoCropDrag(event) {
+  if (!photoCropState?.dragging) return;
+  photoCropState.centerX += event.clientX - photoCropState.lastPointerX;
+  photoCropState.centerY += event.clientY - photoCropState.lastPointerY;
+  photoCropState.lastPointerX = event.clientX;
+  photoCropState.lastPointerY = event.clientY;
+  drawPhotoCrop();
+}
+
+function endPhotoCropDrag() {
+  if (photoCropState) photoCropState.dragging = false;
+}
+
+function closePhotoCropper() {
+  documentElements.photoCropModal.classList.add('hidden');
+  photoCropState = null;
+}
+
+async function savePhotoCrop() {
+  if (!photoCropState) return;
+  documentElements.btnSavePhotoCrop.disabled = true;
+  documentElements.photoCropStatus.textContent = '範囲を保存しています…';
+  try {
+    const state = photoCropState;
+    const geometry = state.geometry;
+    const scale = state.imageScale;
+    const sourceX = Math.max(0, (geometry.cropX - state.imageX) / scale);
+    const sourceY = Math.max(0, (geometry.cropY - state.imageY) / scale);
+    const sourceWidth = Math.min(state.image.naturalWidth - sourceX, geometry.cropWidth / scale);
+    const sourceHeight = Math.min(state.image.naturalHeight - sourceY, geometry.cropHeight / scale);
+    const outputScale = Math.min(1, 1600 / Math.max(sourceWidth, sourceHeight));
+    const output = document.createElement('canvas');
+    output.width = Math.max(1, Math.round(sourceWidth * outputScale));
+    output.height = Math.max(1, Math.round(sourceHeight * outputScale));
+    output.getContext('2d').drawImage(state.image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, output.width, output.height);
+    const blob = await new Promise(resolve => output.toBlob(resolve, 'image/jpeg', .92));
+    if (!blob) throw new Error('切り抜いた画像を作成できませんでした');
+
+    const croppedPhoto = {
+      id: crypto.randomUUID(),
+      name: `${state.photo.name}（範囲選択）`,
+      blob,
+      createdAt: Date.now(),
+      derived: true,
+      sourceId: state.photo.id
+    };
+    await withThemePhotoStore('readwrite', store => store.put(croppedPhoto));
+    closePhotoCropper();
+    pendingThemePhoto = null;
+    await selectThemePhoto(croppedPhoto);
+  } catch (error) {
+    documentElements.photoCropStatus.textContent = `範囲を保存できませんでした: ${error.message}`;
+  } finally {
+    documentElements.btnSavePhotoCrop.disabled = false;
+  }
+}
+
+async function selectThemePhoto(photo) {
+  let url = themePhotoObjectUrls.get(photo.id);
+  if (!url) {
+    url = URL.createObjectURL(photo.blob);
+    themePhotoObjectUrls.set(photo.id, url);
+  }
+  const assignments = JSON.parse(localStorage.getItem('instant-ledger-theme-photo-assignments') || '{}');
+  assignments[activePhotoTarget] = photo.id;
+  localStorage.setItem('instant-ledger-theme-photo-assignments', JSON.stringify(assignments));
+  applyThemePhoto(activePhotoTarget, url);
+  closeThemePhotoPicker();
+}
+
+function applyThemePhoto(target, url) {
+  const isWidget = target.startsWith('widget:') || target === 'widget';
+  const button = document.querySelector(`[data-photo-target="${isWidget ? 'widget' : target}"]`);
+  if (button) button.textContent = '写真を変更';
+  const resetButton = document.querySelector(`[data-photo-reset="${isWidget ? 'widget' : target}"]`);
+  if (resetButton) resetButton.classList.remove('hidden');
+  if (!isWidget) {
+    const dimPhoto = documentElements.toggleBackgroundPhotoDim.checked;
+    const overlay = dimPhoto ? 'linear-gradient(rgba(255,255,255,.76), rgba(255,255,255,.76)), ' : '';
+    document.querySelector('.app-content').style.backgroundImage = `${overlay}url("${url}")`;
+    document.querySelector('.app-content').style.backgroundSize = 'cover';
+    document.querySelector('.app-content').style.backgroundPosition = 'center';
+  } else {
+    const widgetId = target === 'widget' ? 'total' : target.slice('widget:'.length);
+    const widget = document.querySelector(`[data-photo-widget="${widgetId}"]`);
+    if (widget) {
+      const dimPhoto = getWidgetDimSetting(widgetId);
+      const overlay = dimPhoto ? 'linear-gradient(rgba(255,255,255,.72), rgba(255,255,255,.72)), ' : '';
+      widget.style.backgroundImage = `${overlay}url("${url}")`;
+      widget.style.backgroundSize = 'cover';
+      widget.style.backgroundPosition = 'center';
+    }
+  }
+}
+
+function updateSelectedWidgetResetState() {
+  const target = `widget:${documentElements.selectPhotoWidget.value}`;
+  const assignments = JSON.parse(localStorage.getItem('instant-ledger-theme-photo-assignments') || '{}');
+  document.querySelector('[data-photo-reset="widget"]').classList.toggle('hidden', !assignments[target]);
+  document.querySelector('[data-photo-target="widget"]').textContent = assignments[target] ? '写真を変更' : '写真を選ぶ';
+}
+
+function getWidgetDimSetting(widgetId) {
+  const settings = JSON.parse(localStorage.getItem('instant-ledger-widget-photo-dim-settings') || '{}');
+  if (Object.prototype.hasOwnProperty.call(settings, widgetId)) return settings[widgetId];
+  return localStorage.getItem('instant-ledger-widget-photo-dim') !== 'false';
+}
+
+function getSelectedWidgetDimSetting() {
+  return getWidgetDimSetting(documentElements.selectPhotoWidget.value);
+}
+
+function getAllWidgetDimSettings() {
+  const settings = JSON.parse(localStorage.getItem('instant-ledger-widget-photo-dim-settings') || '{}');
+  document.querySelectorAll('[data-photo-widget]').forEach(widget => {
+    const id = widget.dataset.photoWidget;
+    if (!Object.prototype.hasOwnProperty.call(settings, id)) settings[id] = getWidgetDimSetting(id);
+  });
+  return settings;
+}
+
+function updateSelectedWidgetSettings() {
+  documentElements.toggleWidgetPhotoDim.checked = getSelectedWidgetDimSetting();
+  const selectedOption = documentElements.selectPhotoWidget.selectedOptions[0];
+  documentElements.widgetPhotoDimTitle.textContent = `${selectedOption.textContent}の写真を薄く表示`;
+  updateSelectedWidgetResetState();
+}
+
+function resetThemePhoto(target) {
+  const assignments = JSON.parse(localStorage.getItem('instant-ledger-theme-photo-assignments') || '{}');
+  delete assignments[target];
+  if (Object.keys(assignments).length) {
+    localStorage.setItem('instant-ledger-theme-photo-assignments', JSON.stringify(assignments));
+  } else {
+    localStorage.removeItem('instant-ledger-theme-photo-assignments');
+  }
+
+  const isWidget = target.startsWith('widget:') || target === 'widget';
+  const button = document.querySelector(`[data-photo-target="${isWidget ? 'widget' : target}"]`);
+  if (button) button.textContent = '写真を選ぶ';
+  document.querySelector(`[data-photo-reset="${isWidget ? 'widget' : target}"]`)?.classList.add('hidden');
+  if (target === 'background') {
+    const content = document.querySelector('.app-content');
+    content.style.backgroundImage = '';
+    content.style.backgroundSize = '';
+    content.style.backgroundPosition = '';
+  } else {
+    const widgetId = target === 'widget' ? 'total' : target.slice('widget:'.length);
+    const widget = document.querySelector(`[data-photo-widget="${widgetId}"]`);
+    if (widget) {
+      widget.style.backgroundImage = '';
+      widget.style.backgroundSize = '';
+      widget.style.backgroundPosition = '';
+    }
+    updateSelectedWidgetResetState();
+  }
+}
+
+async function restoreThemePhotoAssignments() {
+  const assignments = JSON.parse(localStorage.getItem('instant-ledger-theme-photo-assignments') || '{}');
+  if (assignments.widget && !assignments['widget:total']) {
+    assignments['widget:total'] = assignments.widget;
+    delete assignments.widget;
+    localStorage.setItem('instant-ledger-theme-photo-assignments', JSON.stringify(assignments));
+  }
+  for (const [target, id] of Object.entries(assignments)) {
+    const photo = await withThemePhotoStore('readonly', store => store.get(id));
+    if (photo) {
+      let url = themePhotoObjectUrls.get(photo.id);
+      if (!url) {
+        url = URL.createObjectURL(photo.blob);
+        themePhotoObjectUrls.set(photo.id, url);
+      }
+      applyThemePhoto(target, url);
+    }
+  }
+  updateSelectedWidgetResetState();
 }
 
 // ==========================================

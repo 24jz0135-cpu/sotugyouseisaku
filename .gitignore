@@ -9,5 +9,5 @@
 *.log
 
 # Per-user OISO2 Bridge credentials and received receipts
-oiso2/bridge/.env
-oiso2/bridge/bridge-data/
+**/bridge/.env
+**/bridge/bridge-data/
