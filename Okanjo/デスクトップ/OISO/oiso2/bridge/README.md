@@ -1,14 +1,18 @@
 # OISO2 Bridge（利用者PCで実行）
 
-Discordを受信箱として使い、添付されたレシート画像をこのPCへ保存します。Botトークン・画像・CSVは開発者のサーバーへ送信しません。
+Discordを受信箱として使い、添付されたレシート画像をこのPCへ保存します。標準構成では、開発者がOracle Cloudで動かす共通Botを使うため、利用者がBotトークンを作る必要はありません。AI解析はこのPCでのみ動きます。
 
 ## 初回設定
 
-1. Discord Developer Portalで**自分用**のBotを作成し、専用の非公開チャンネルへ追加します。
-2. Botにそのチャンネルの「メッセージを見る」「メッセージを送信」「添付ファイルを送信」権限を与えます。
-3. `.env.example` をコピーして `.env` を作り、`DISCORD_BOT_TOKEN` と `DISCORD_CHANNEL_ID` を設定します。`.env` はGit管理外です。トークンをOISO本体やGitへ書かないでください。
-4. このフォルダで `npm install`、続けて `npm start` を実行します。
-5. OISO2を `http://127.0.0.1:4174/` で開き、「Bridgeの受信箱を取り込む」を押します。
+1. `.env.example` をコピーして `.env` を作り、運営者から案内された `COMMON_RELAY_URL` を設定します。
+2. このフォルダで `npm install`、続けて `npm start` を実行します。
+3. OISO2を `http://127.0.0.1:4174/` で開き、「Bridgeを確認」→「Discordとペアリング」を押します。
+4. Botを入れた自分専用Discordチャンネルに、画面へ表示された `!oiso-pair ...` を送ります。
+5. 接続完了後に「スマホ送信用QRを作成」を押します。
+
+### 自分のBotを使う場合（開発用・従来方式）
+
+`COMMON_RELAY_URL` を空欄にし、`DISCORD_BOT_TOKEN` と `DISCORD_CHANNEL_ID` を設定すれば、利用者自身のBotにも接続できます。実際のトークンはGitへコミットしないでください。
 
 ## スマホから送る
 

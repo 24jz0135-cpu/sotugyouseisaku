@@ -17,13 +17,26 @@ try {
   }
 } catch { /* .env is optional; process environment variables also work. */ }
 
-const config = { token: process.env.DISCORD_BOT_TOKEN, channelId: process.env.DISCORD_CHANNEL_ID, port: Number(process.env.PORT || 8788), analyzer: process.env.ANALYZER_MODE || 'mock', codex: process.env.CODEX_COMMAND || 'codex', autoAnalyze: process.env.AUTO_ANALYZE === 'true' };
+const config = { token: process.env.DISCORD_BOT_TOKEN, channelId: process.env.DISCORD_CHANNEL_ID, port: Number(process.env.PORT || 8788), analyzer: process.env.ANALYZER_MODE || 'mock', codex: process.env.CODEX_COMMAND || 'codex', autoAnalyze: process.env.AUTO_ANALYZE === 'true', commonRelayUrl: (process.env.COMMON_RELAY_URL || '').replace(/\/$/, '') };
 const root = resolve(process.cwd(), 'bridge-data');
 const inbox = join(root, 'inbox');
 const results = join(root, 'results');
 const imageExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 const mimeFor = filename => ({ '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' }[extname(filename).toLowerCase()] || 'image/jpeg');
 await Promise.all([mkdir(inbox, { recursive: true }), mkdir(results, { recursive: true })]);
+const commonRelayFile = join(root, 'common-relay.json');
+let commonRelay = { deviceToken: process.env.COMMON_RELAY_DEVICE_TOKEN || '', pendingPairs: {} };
+if (!commonRelay.deviceToken) { try { commonRelay = { ...commonRelay, ...JSON.parse(await readFile(commonRelayFile, 'utf8')) }; } catch { /* not paired yet */ } }
+const commonEnabled = () => Boolean(config.commonRelayUrl);
+async function saveCommonRelay() { await writeFile(commonRelayFile, JSON.stringify(commonRelay), 'utf8'); }
+async function commonRequest(path, options = {}) {
+  if (!commonEnabled()) throw new Error('COMMON_RELAY_URL が未設定です');
+  const headers = { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(commonRelay.deviceToken ? { Authorization: `Bearer ${commonRelay.deviceToken}` } : {}), ...options.headers };
+  const response = await fetch(`${config.commonRelayUrl}${path}`, { ...options, headers });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || '共通Relayとの通信に失敗しました');
+  return payload;
+}
 
 function csvEscape(value) { const text = value == null ? '' : String(value); return /[\",\n]/.test(text) ? `\"${text.replaceAll('\"', '\"\"')}\"` : text; }
 function toCsv(records) { const fields = ['receiptId', 'date', 'vendor', 'amount', 'category', 'confidence']; return [fields.join(','), ...records.map(record => fields.map(field => csvEscape(record[field])).join(','))].join('\n'); }
@@ -45,6 +58,24 @@ async function saveAttachment(attachment) {
   if (!response.ok || !response.body) throw new Error(`${sourceName} をダウンロードできませんでした`);
   await pipeline(Readable.fromWeb(response.body), createWriteStream(destination));
   return { id, fileName: sourceName };
+}
+async function syncCommonRelayInbox() {
+  if (!commonEnabled() || !commonRelay.deviceToken) return [];
+  const { receipts } = await commonRequest('/api/inbox');
+  const existing = new Set((await listInbox()).map(item => item.id));
+  const acknowledged = [], saved = [];
+  for (const receipt of receipts) {
+    if (existing.has(receipt.id)) { acknowledged.push(receipt.id); continue; }
+    const sourceName = basename(receipt.name || 'receipt.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+    if (!imageExtensions.has(extname(sourceName).toLowerCase())) { acknowledged.push(receipt.id); continue; }
+    const response = await fetch(receipt.attachmentUrl);
+    if (!response.ok || !response.body) continue;
+    await pipeline(Readable.fromWeb(response.body), createWriteStream(join(inbox, `${receipt.id}__${sourceName}`)));
+    acknowledged.push(receipt.id); saved.push(receipt.id);
+  }
+  if (acknowledged.length) await commonRequest('/api/inbox/ack', { method: 'POST', body: JSON.stringify({ ids: acknowledged }) });
+  if (config.autoAnalyze && saved.length) queueReceiptAnalysis(saved);
+  return saved;
 }
 async function receiptFiles(ids) { const rows = await listInbox(); const byId = new Map(rows.map(row => [row.id, row])); return ids.map(id => byId.get(id)).filter(Boolean).map(row => ({ ...row, path: join(inbox, `${row.id}__${row.fileName}`) })); }
 function run(command, args) { return new Promise((resolveRun, reject) => { const child = spawn(command, args, { cwd: root, shell: false, windowsHide: true }); let stderr = ''; child.stderr.on('data', data => { stderr += data; }); child.on('error', reject); child.on('close', code => code === 0 ? resolveRun() : reject(new Error(stderr || `${command} exited with ${code}`))); }); }
@@ -71,6 +102,11 @@ function expireSession(sessionId) {
   session.webhook?.delete('OISO mobile relay session expired').catch(() => {});
 }
 async function createMobileSession() {
+  if (commonEnabled()) {
+    if (!commonRelay.deviceToken) throw new Error('先に共通Relayをペアリングしてください');
+    const payload = await commonRequest('/api/mobile-sessions', { method: 'POST' });
+    return { ...payload, qrDataUrl: await QRCode.toDataURL(JSON.stringify(payload), { errorCorrectionLevel: 'M', margin: 1, width: 280 }) };
+  }
   if (!discordChannel?.createWebhook) throw new Error('Discord Bridgeを接続してから一時QRを作成してください');
   const sessionId = `S-${randomUUID().slice(0, 8).toUpperCase()}`;
   const webhook = await discordChannel.createWebhook({ name: `OISO-${sessionId}` });
@@ -80,7 +116,10 @@ async function createMobileSession() {
   setTimeout(() => expireSession(sessionId), 10 * 60 * 1000 + 1000).unref();
   return { ...payload, qrDataUrl: await QRCode.toDataURL(JSON.stringify(payload), { errorCorrectionLevel: 'M', margin: 1, width: 280 }) };
 }
-async function sendResultToDiscord(result) { if (discordChannel) await discordChannel.send({ content: `OISO2解析結果 ${result.jobId}（${result.records.length}件）`, files: [result.csvPath] }); }
+async function sendResultToDiscord(result) {
+  if (commonEnabled() && commonRelay.deviceToken) return commonRequest('/api/results', { method: 'POST', body: JSON.stringify({ jobId: result.jobId, fileName: `oiso2_${result.jobId}.csv`, csv: result.csv }) });
+  if (discordChannel) await discordChannel.send({ content: `OISO2解析結果 ${result.jobId}（${result.records.length}件）`, files: [result.csvPath] });
+}
 function queueReceiptAnalysis(ids) {
   const jobId = `queue-${Date.now()}-${randomUUID().slice(0, 4)}`;
   jobs.set(jobId, { id: jobId, ids, status: 'queued', createdAt: new Date().toISOString() });
@@ -92,6 +131,7 @@ function queueReceiptAnalysis(ids) {
   return jobId;
 }
 async function bootDiscord() {
+  if (commonEnabled()) { console.log('OISO Common Relay経由で接続します。'); return; }
   if (!config.token || !config.channelId) { console.log('Discord未設定: ローカルAPIのみを起動します。'); return; }
   const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent], partials: [Partials.Channel] });
   client.once('ready', async () => { discordChannel = await client.channels.fetch(config.channelId); console.log(`Discord Relay接続済み: ${client.user.tag}`); });
@@ -109,19 +149,23 @@ async function bootDiscord() {
   });
   await client.login(config.token);
 }
-function json(response, status, body) { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174' }); response.end(JSON.stringify(body)); }
+function allowedOrigin(request) { const origin = request.headers.origin || ''; return /^https?:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin) ? origin : 'http://127.0.0.1:4174'; }
+function json(response, status, body, request) { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': allowedOrigin(request) }); response.end(JSON.stringify(body)); }
 function parseBody(request) { return new Promise((resolveBody, reject) => { let text = ''; request.on('data', chunk => { text += chunk; if (text.length > 100000) request.destroy(); }); request.on('end', () => { try { resolveBody(text ? JSON.parse(text) : {}); } catch { reject(new Error('JSON形式が不正です')); } }); request.on('error', reject); }); }
 const server = createServer(async (request, response) => {
-  if (request.method === 'OPTIONS') { response.writeHead(204, { 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174', 'Access-Control-Allow-Methods': 'GET,POST' }); return response.end(); }
+  if (request.method === 'OPTIONS') { response.writeHead(204, { 'Access-Control-Allow-Origin': allowedOrigin(request), 'Access-Control-Allow-Methods': 'GET,POST' }); return response.end(); }
   try { const url = new URL(request.url, `http://${request.headers.host}`);
-    if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { ok: true, discord: Boolean(discordChannel), analyzer: config.analyzer, autoAnalyze: config.autoAnalyze });
-    if (request.method === 'GET' && url.pathname === '/api/jobs') return json(response, 200, { jobs: [...jobs.values()].slice(-20).reverse() });
-    if (request.method === 'POST' && url.pathname === '/api/mobile-sessions') return json(response, 200, await createMobileSession());
-    if (request.method === 'GET' && url.pathname === '/api/inbox') return json(response, 200, { receipts: await listInbox() });
-    if (request.method === 'GET' && url.pathname.startsWith('/api/files/')) { const file = basename(decodeURIComponent(url.pathname.slice('/api/files/'.length))); const data = await readFile(join(inbox, file)); response.writeHead(200, { 'Content-Type': mimeFor(file), 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174' }); return response.end(data); }
-    if (request.method === 'POST' && url.pathname === '/api/analyze') { const body = await parseBody(request); const result = await analyze(Array.isArray(body.ids) ? body.ids : []); await sendResultToDiscord(result); return json(response, 200, { jobId: result.jobId, records: result.records, csv: result.csv, mode: result.mode, sentToDiscord: Boolean(discordChannel) }); }
-    return json(response, 404, { error: 'not found' });
-  } catch (error) { return json(response, 400, { error: error.message }); }
+    if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { ok: true, discord: Boolean(discordChannel) || Boolean(commonRelay.deviceToken), commonRelay: commonEnabled(), paired: Boolean(commonRelay.deviceToken), analyzer: config.analyzer, autoAnalyze: config.autoAnalyze }, request);
+    if (request.method === 'GET' && url.pathname === '/api/jobs') return json(response, 200, { jobs: [...jobs.values()].slice(-20).reverse() }, request);
+    if (request.method === 'POST' && url.pathname === '/api/mobile-sessions') return json(response, 200, await createMobileSession(), request);
+    if (request.method === 'POST' && url.pathname === '/api/common-relay/pairings') { const pairing = await commonRequest('/api/pairings', { method: 'POST' }); commonRelay.pendingPairs = { ...commonRelay.pendingPairs, [pairing.code]: pairing.claimToken }; await saveCommonRelay(); return json(response, 201, { code: pairing.code, expiresAt: pairing.expiresAt }, request); }
+    if (request.method === 'GET' && url.pathname === '/api/common-relay/pairings') { const code = (url.searchParams.get('code') || '').toUpperCase(), claimToken = commonRelay.pendingPairs?.[code]; if (!claimToken) throw new Error('このPCで開始したペアリングコードではありません'); const pairing = await commonRequest(`/api/pairings/claim?code=${encodeURIComponent(code)}&claimToken=${encodeURIComponent(claimToken)}`); if (pairing.paired) { commonRelay.deviceToken = pairing.deviceToken; delete commonRelay.pendingPairs[code]; await saveCommonRelay(); } return json(response, 200, pairing, request); }
+    if (request.method === 'GET' && url.pathname === '/api/inbox') { await syncCommonRelayInbox(); return json(response, 200, { receipts: await listInbox() }, request); }
+    if (request.method === 'GET' && url.pathname.startsWith('/api/files/')) { const file = basename(decodeURIComponent(url.pathname.slice('/api/files/'.length))); const data = await readFile(join(inbox, file)); response.writeHead(200, { 'Content-Type': mimeFor(file), 'Access-Control-Allow-Origin': allowedOrigin(request) }); return response.end(data); }
+    if (request.method === 'POST' && url.pathname === '/api/analyze') { const body = await parseBody(request); const result = await analyze(Array.isArray(body.ids) ? body.ids : []); await sendResultToDiscord(result); return json(response, 200, { jobId: result.jobId, records: result.records, csv: result.csv, mode: result.mode, sentToDiscord: Boolean(discordChannel) }, request); }
+    return json(response, 404, { error: 'not found' }, request);
+  } catch (error) { return json(response, 400, { error: error.message }, request); }
 });
 server.listen(config.port, '127.0.0.1', () => console.log(`OISO2 Bridge: http://127.0.0.1:${config.port}`));
 await bootDiscord();
+if (commonEnabled()) setInterval(() => syncCommonRelayInbox().catch(error => console.warn(`Common Relay同期失敗: ${error.message}`)), 15_000).unref();

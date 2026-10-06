@@ -1,0 +1,15 @@
+[Unit]
+Description=OISO Common Discord Relay
+After=network.target
+
+[Service]
+Type=simple
+User=oiso
+WorkingDirectory=/opt/oiso-common-relay
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/oiso-common-relay/index.mjs
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
