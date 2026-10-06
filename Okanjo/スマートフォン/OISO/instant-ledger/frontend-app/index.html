@@ -122,118 +122,20 @@
         </section>
 
 
-        <!-- 2. スキャン & 音声入力画面 -->
+        <!-- 2. レシート保管画面 -->
         <section id="screen-scan" class="screen-panel">
-          <h2 class="section-title">現場で記録する</h2>
-          
-          <div class="sensor-tabs">
-            <button class="sensor-tab active" id="tab-camera">
-              <i data-lucide="camera"></i>
-              <span>レシート撮影</span>
-            </button>
-            <button class="sensor-tab" id="tab-voice">
-              <i data-lucide="mic"></i>
-              <span>音声メモ</span>
-            </button>
-          </div>
-
-          <!-- カメラシミュレータ -->
-          <div id="panel-camera" class="sensor-panel active">
-            <div class="camera-viewport">
-              <div class="scanline"></div>
-              <div class="camera-overlay-corner top-left"></div>
-              <div class="camera-overlay-corner top-right"></div>
-              <div class="camera-overlay-corner bottom-left"></div>
-              <div class="camera-overlay-corner bottom-right"></div>
-              
-              <!-- 実際のカメラ映像ストリームと撮影後のキャプチャ表示 -->
-              <video id="camera-stream" autoplay playsinline class="camera-video-elem hidden"></video>
-              <img id="camera-captured-img" class="camera-captured-img hidden" alt="Captured receipt">
-              
-              <div class="camera-placeholder" id="camera-preview-box">
-                <i data-lucide="image" class="placeholder-icon"></i>
-                <p>ここに領収書・レシートを収めてください</p>
-                <span class="location-badge" id="camera-location"><i data-lucide="map-pin"></i> 検出中...</span>
-              </div>
-            </div>
-            
-            <div class="action-bar">
-              <button class="btn-primary btn-glow" id="btn-capture">
-                <i data-lucide="aperture"></i>
-                <span>写真を撮影してOCR解析</span>
-              </button>
-            </div>
-            <p class="local-evidence-note"><i data-lucide="shield-check"></i> レシート画像はこの端末内に証憑として保存されます</p>
-          </div>
-
-          <!-- 音声シミュレータ -->
-          <div id="panel-voice" class="sensor-panel">
-            <div class="voice-viewport">
-              <div class="voice-wave" id="voice-wave-container">
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-                <div class="wave-bar"></div>
-              </div>
-              
-              <div class="voice-placeholder" id="voice-preview-box">
-                <i data-lucide="mic" class="placeholder-icon"></i>
-                <p id="voice-status-text">ボタンを押して、仕入れ内容を話してください</p>
-                <span class="location-badge" id="voice-location"><i data-lucide="map-pin"></i> 検出中...</span>
-              </div>
-            </div>
-            
-            <div class="action-bar">
-              <button class="btn-primary btn-glow" id="btn-record">
-                <i data-lucide="mic"></i>
-                <span id="btn-record-text">音声メモを入力する</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- プレビューと保存用フォーム (スキャン/録音後に表示) -->
-          <div class="fact-preview-card hidden" id="fact-preview-card">
-            <div class="preview-header">
-              <span class="preview-badge"><i data-lucide="sparkles"></i> AI解析結果</span>
-              <button class="btn-close" id="btn-cancel-preview"><i data-lucide="x"></i></button>
-            </div>
-            
-            <div class="preview-form">
-              <div class="form-group">
-                <label>検出した場所 (店舗名)</label>
-                <input type="text" id="input-vendor" placeholder="例: 鮮魚田中 豊洲店">
-              </div>
-              <div class="form-group">
-                <label>金額 (円)</label>
-                <input type="number" id="input-amount" placeholder="例: 12500">
-              </div>
-              <div class="form-group">
-                <label>勘定科目</label>
-                <select id="input-category">
-                  <option value="仕入高">仕入高 (食材・飲料)</option>
-                  <option value="消耗品費">消耗品費 (備品・衛生用品)</option>
-                  <option value="旅費交通費">旅費交通費 (買い出し移動)</option>
-                  <option value="水道光熱費">水道光熱費</option>
-                  <option value="雑費">雑費</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>解析テキスト・音声生ログ</label>
-                <textarea id="input-rawtext" rows="2" placeholder="解析結果のテキスト"></textarea>
-              </div>
-              
-              <div class="form-row geo-info">
-                <span><i data-lucide="map-pin"></i> 緯度: <span id="span-lat">0.0000</span></span>
-                <span>経度: <span id="span-lng">0.0000</span></span>
-              </div>
-
-              <button class="btn-success" id="btn-save-fact">
-                <i data-lucide="check-circle-2"></i>
-                <span>この経費を記録する</span>
-              </button>
-            </div>
-          </div>
+          <h2 class="section-title">レシートを端末に保存</h2>
+          <section class="receipt-capture-card">
+            <i data-lucide="camera" class="receipt-capture-icon"></i>
+            <h3>撮影した画像を保管する</h3>
+            <p>ここでは文字の読み取りやAI解析はしません。画像はこの端末に保存し、あとでPCのOISO2へ送って解析します。</p>
+            <label class="btn-primary btn-glow receipt-capture-button">
+              <i data-lucide="camera"></i><span>写真を撮影・追加する</span>
+              <input id="input-quick-receipt" type="file" accept="image/*" capture="environment" multiple hidden>
+            </label>
+            <p class="local-evidence-note"><i data-lucide="shield-check"></i> 画像はこの端末内に保存されます</p>
+            <p id="receipt-capture-status" class="receipt-capture-status" role="status"></p>
+          </section>
         </section>
 
 
@@ -344,8 +246,8 @@
           <span>ホーム</span>
         </button>
         <button class="nav-item" data-target="screen-scan">
-          <i data-lucide="plus-circle" class="nav-icon-main"></i>
-          <span>現場で記録</span>
+          <i data-lucide="camera" class="nav-icon-main"></i>
+          <span>レシート保管</span>
         </button>
         <button class="nav-item" data-target="screen-history">
           <i data-lucide="receipt"></i>

@@ -172,7 +172,9 @@ const documentElements = {
   receiptModal: document.getElementById('receipt-modal'),
   receiptModalImage: document.getElementById('receipt-modal-image'),
   receiptModalEmpty: document.getElementById('receipt-modal-empty'),
-  btnCloseReceiptModal: document.getElementById('btn-close-receipt-modal')
+  btnCloseReceiptModal: document.getElementById('btn-close-receipt-modal'),
+  inputQuickReceipt: document.getElementById('input-quick-receipt'),
+  receiptCaptureStatus: document.getElementById('receipt-capture-status')
 };
 
 // ==========================================
@@ -192,7 +194,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // イベントリスナー登録
   initNavigation();
   initSensorControls();
-  initFormControls();
   initHistoryControls();
   initLocalVaultControls();
   
@@ -990,23 +991,11 @@ function switchTab(screenId) {
     }
   });
 
-  // スキャン画面以外に切り替わった場合、カメラやマイクを完全に停止する
-  if (screenId !== 'screen-scan') {
-    stopCamera();
-    stopRecording();
-  }
-
   // 画面ごとのフック処理
   if (screenId === 'screen-home') {
     renderDashboard();
   } else if (screenId === 'screen-history') {
     renderHistory();
-  } else if (screenId === 'screen-scan') {
-    updateLocation();
-    // カメラタブがアクティブならカメラを起動する
-    if (appState.sensorType === 'CAMERA') {
-      startCamera();
-    }
   }
 }
 
@@ -1428,127 +1417,35 @@ function handleSpeechResult(text) {
 }
 
 // ==========================================
-// Sensor Screen Logic (Camera / Voice Simulation)
+// Receipt capture: 保存だけを行い、端末側では解析しない。
 // ==========================================
 function initSensorControls() {
-  // センサー切り替えタブ
-  documentElements.tabCamera.addEventListener('click', () => {
-    appState.sensorType = 'CAMERA';
-    documentElements.tabCamera.classList.add('active');
-    documentElements.tabVoice.classList.remove('active');
-    documentElements.panelCamera.classList.add('active');
-    documentElements.panelVoice.classList.remove('active');
-    documentElements.factPreviewCard.classList.add('hidden');
-    stopRecording();
-    updateLocation();
-    startCamera();
-  });
-
-  documentElements.tabVoice.addEventListener('click', () => {
-    appState.sensorType = 'VOICE';
-    documentElements.tabVoice.classList.add('active');
-    documentElements.tabCamera.classList.remove('active');
-    documentElements.panelVoice.classList.add('active');
-    documentElements.panelCamera.classList.remove('active');
-    documentElements.factPreviewCard.classList.add('hidden');
-    stopCamera();
-    updateLocation();
-  });
-
-  // レシート撮影ボタン
-  documentElements.btnCapture.addEventListener('click', () => {
-    const originalContent = documentElements.btnCapture.innerHTML;
-    documentElements.btnCapture.disabled = true;
-    documentElements.btnCapture.innerHTML = `<i data-lucide="loader" class="spin"></i> <span>OCR読み取り中...</span>`;
-    lucide.createIcons();
-
-    // 実際のカメラキャプチャを実行
-    capturePhoto();
-
-    setTimeout(() => {
-      // ランダムにレシートを1件選択してフォームにセット (OCRシミュレーション)
-      const idx = Math.floor(Math.random() * MOCK_RECEIPTS.length);
-      const mock = MOCK_RECEIPTS[idx];
-      
-      documentElements.inputVendor.value = mock.vendor;
-      documentElements.inputAmount.value = mock.amount;
-      documentElements.inputCategory.value = mock.category;
-      documentElements.inputRawText.value = mock.rawText;
-      
-      documentElements.spanLat.textContent = appState.gps.latitude.toFixed(4);
-      documentElements.spanLng.textContent = appState.gps.longitude.toFixed(4);
-      
-      documentElements.factPreviewCard.classList.remove('hidden');
-      documentElements.btnCapture.disabled = false;
-      documentElements.btnCapture.innerHTML = originalContent;
-      
-      documentElements.factPreviewCard.scrollIntoView({ behavior: 'smooth' });
-    }, 1200);
-  });
-
-  // 音声メモ入力ボタン
-  documentElements.btnRecord.addEventListener('click', () => {
-    if (appState.isRecording) {
-      stopRecording(false);
-    } else {
-      startRecording();
+  documentElements.inputQuickReceipt.addEventListener('change', async event => {
+    const files = [...event.target.files].filter(file => file.type.startsWith('image/'));
+    if (!files.length) return;
+    documentElements.receiptCaptureStatus.textContent = '端末内に保存しています…';
+    try {
+      await Promise.all(files.map(async file => {
+        if (file.size > 15 * 1024 * 1024) throw new Error(`${file.name} は15MB以下にしてください`);
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error(`${file.name} を読み込めませんでした`));
+          reader.readAsDataURL(file);
+        });
+        await receiptVault.put({
+          id: `receipt_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+          dataUrl,
+          createdAt: new Date().toISOString(),
+          mimeType: file.type
+        });
+      }));
+      documentElements.receiptCaptureStatus.textContent = `${files.length}枚を端末に保存しました。履歴一覧からPCへ送信できます。`;
+    } catch (error) {
+      documentElements.receiptCaptureStatus.textContent = `保存できませんでした: ${error.message}`;
+    } finally {
+      event.target.value = '';
     }
-  });
-}
-
-// ==========================================
-// Preview Form Logic
-// ==========================================
-function initFormControls() {
-  documentElements.btnCancelPreview.addEventListener('click', () => {
-    documentElements.factPreviewCard.classList.add('hidden');
-    appState.currentReceipt = null;
-    // キャンセルされた場合、カメラタブであればプレビューを再開
-    if (appState.sensorType === 'CAMERA') {
-      startCamera();
-    }
-  });
-
-  documentElements.btnSaveFact.addEventListener('click', async () => {
-    const vendorName = documentElements.inputVendor.value.trim();
-    const amount = parseInt(documentElements.inputAmount.value, 10) || 0;
-    if (!vendorName || !amount) {
-      alert("店舗名と金額を入力してください！");
-      return;
-    }
-    let receiptId = null;
-    if (appState.sensorType === 'CAMERA' && appState.currentReceipt) {
-      try {
-        await receiptVault.put(appState.currentReceipt);
-        receiptId = appState.currentReceipt.id;
-      } catch (error) {
-        alert(`レシート画像を端末に保存できませんでした: ${error.message}`);
-        return;
-      }
-    }
-    const payload = {
-      userId: 'user_shinjuku_001',
-      timestamp: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      latitude: appState.gps.latitude,
-      longitude: appState.gps.longitude,
-      sensorType: appState.sensorType,
-      rawText: documentElements.inputRawText.value,
-      amount,
-      category: documentElements.inputCategory.value,
-      vendorName,
-      receiptId
-    };
-
-    // 保存ローディング
-    documentElements.btnSaveFact.disabled = true;
-    documentElements.btnSaveFact.innerHTML = `<i data-lucide="loader" class="spin"></i> <span>送信中...</span>`;
-    lucide.createIcons();
-
-    uploadRecord(payload).finally(() => {
-      documentElements.btnSaveFact.disabled = false;
-      documentElements.btnSaveFact.innerHTML = `<i data-lucide="check-circle-2"></i> <span>この経費を記録する</span>`;
-      lucide.createIcons();
-    });
   });
 }
 
