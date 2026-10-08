@@ -1,0 +1,57 @@
+name: Deploy OISO to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Okanjo/スマートフォン/OISO/instant-ledger/frontend-app/**'
+      - 'Okanjo/デスクトップ/OISO/oiso2/**'
+      - 'Okanjo/index.html'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Assemble static site
+        run: |
+          mkdir -p _site/smartphone _site/desktop
+          cp -R 'Okanjo/スマートフォン/OISO/instant-ledger/frontend-app/.' _site/smartphone/
+          cp 'Okanjo/デスクトップ/OISO/oiso2/index.html' _site/desktop/
+          cp 'Okanjo/デスクトップ/OISO/oiso2/app.js' _site/desktop/
+          cp 'Okanjo/デスクトップ/OISO/oiso2/style.css' _site/desktop/
+          cp 'Okanjo/デスクトップ/OISO/oiso2/tax.js' _site/desktop/
+          cp 'Okanjo/デスクトップ/OISO/oiso2/tax-ui.js' _site/desktop/
+          cp Okanjo/index.html _site/index.html
+          touch _site/.nojekyll
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
