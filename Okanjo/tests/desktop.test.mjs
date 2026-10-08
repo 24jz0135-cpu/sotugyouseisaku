@@ -8,7 +8,7 @@ test('reviewed CSV contains edited fields, quotes commas and neutralizes spreads
   const nodes = new Map(); let downloaded;
   const element = () => ({ children: [], append(child) { this.children.push(child); }, setAttribute() {}, style: {}, click() {} });
   const get = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
-  const context = vm.createContext({ document: { getElementById: get, createElement: element }, location: { port: '8788', origin: 'http://127.0.0.1:8788' }, Blob,
+  const context = vm.createContext({ renderTax() {}, document: { getElementById: get, createElement: element }, location: { port: '8788', origin: 'http://127.0.0.1:8788' }, Blob,
     URL: { createObjectURL: blob => { downloaded = blob; return 'blob:test'; }, revokeObjectURL() {} }, setTimeout: callback => callback() });
   vm.runInContext(source.slice(0, source.indexOf('input.onchange=')), context);
   vm.runInContext('renderResults([{receiptId:"R-1",vendor:"=1+1",date:"2026-10-07",amount:1250,category:"food,drink",confidence:0.9}])', context);

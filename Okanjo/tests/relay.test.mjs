@@ -78,6 +78,11 @@ test('Bridge UI, JSON preflight, origin protection, inbox and mock CSV work end 
   });
   const base = `http://127.0.0.1:${port}`;
   assert.match(await (await fetch(base)).text(), /OISO2/);
+  for (const asset of ['tax.js', 'tax-ui.js']) {
+    const response = await fetch(`${base}/${asset}`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type'), /javascript/);
+  }
   const preflight = await fetch(`${base}/api/analyze`, { method: 'OPTIONS', headers: { Origin: 'http://127.0.0.1:4174', 'Access-Control-Request-Headers': 'content-type' } });
   assert.equal(preflight.status, 204); assert.equal(preflight.headers.get('access-control-allow-headers'), 'Content-Type');
   assert.equal((await fetch(`${base}/api/mobile-sessions`, { method: 'POST', headers: { Origin: 'https://example.com' } })).status, 403);

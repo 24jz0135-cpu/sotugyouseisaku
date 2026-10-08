@@ -168,7 +168,7 @@ const server = createServer(async (request, response) => {
   if (request.headers.origin && !/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(request.headers.origin)) return json(response, 403, { error: 'PC上のOISO2から操作してください' }, request);
   if (request.method === 'OPTIONS') { response.writeHead(204, { 'Access-Control-Allow-Origin': allowedOrigin(request), 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Vary': 'Origin' }); return response.end(); }
   try { const url = new URL(request.url, `http://${request.headers.host}`);
-    const assets = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
+    const assets = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/tax.js': ['tax.js', 'text/javascript'], '/tax-ui.js': ['tax-ui.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
     if (request.method === 'GET' && assets[url.pathname]) {
       const [name, type] = assets[url.pathname];
       response.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` });
