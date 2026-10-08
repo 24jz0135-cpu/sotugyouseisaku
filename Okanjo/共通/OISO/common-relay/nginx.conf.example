@@ -1,0 +1,28 @@
+# /etc/nginx/conf.d/oiso-relay.conf
+# Replace relay.example.com and certificate paths after configuring DNS/TLS.
+limit_req_zone $binary_remote_addr zone=oiso_pairing:10m rate=5r/m;
+server {
+    listen 80;
+    server_name relay.example.com;
+    return 301 https://$host$request_uri;
+}
+server {
+    listen 443 ssl;
+    server_name relay.example.com;
+    ssl_certificate /etc/letsencrypt/live/relay.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/relay.example.com/privkey.pem;
+    client_max_body_size 3m;
+    # Claim URLs contain a credential. Do not write request URLs to access logs.
+    access_log off;
+    location = /api/pairings {
+        limit_req zone=oiso_pairing burst=5 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_read_timeout 60s;
+    }
+}

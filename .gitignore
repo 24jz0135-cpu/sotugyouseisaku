@@ -1,0 +1,5 @@
+**/node_modules/
+**/.env
+**/bridge-data/
+**/relay-data/
+**/*.part

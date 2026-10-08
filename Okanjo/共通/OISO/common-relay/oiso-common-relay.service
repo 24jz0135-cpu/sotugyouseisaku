@@ -10,6 +10,12 @@ Environment=NODE_ENV=production
 ExecStart=/usr/bin/node /opt/oiso-common-relay/index.mjs
 Restart=always
 RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/oiso-common-relay/relay-data
 
 [Install]
 WantedBy=multi-user.target

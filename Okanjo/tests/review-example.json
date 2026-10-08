@@ -1,0 +1,5 @@
+{
+  "records": [
+    { "receiptId": "TEST-001", "date": "2026-10-07", "vendor": "動作確認用サンプル店舗", "amount": 1250, "category": "消耗品費", "confidence": 0.95 }
+  ]
+}
