@@ -12,6 +12,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="guide.css">
+  <link rel="stylesheet" href="review.css">
   <script>
     const savedTheme = localStorage.getItem('instant-ledger-theme');
     if (savedTheme && savedTheme !== 'light') document.documentElement.dataset.theme = savedTheme;
@@ -169,6 +170,19 @@
           </div>
         </section>
 
+        <section id="screen-review" class="screen-panel">
+          <h2 class="section-title">解析結果をチェック</h2>
+          <p class="review-intro">Discordに届いた解析結果のCSVをスマホに保存して、ここで読み込んでください。店舗名・日付・金額・科目を確認して修正できます。</p>
+          <label class="review-import">解析CSVを読み込む<input id="review-import" type="file" accept=".csv,text/csv" hidden></label>
+          <div class="review-toolbar"><p id="review-summary"></p><label>表示 <select id="review-filter"><option value="all">すべて</option><option value="pending">未確認</option><option value="confirmed">確認済み</option></select></label></div>
+          <p id="review-status" role="status" aria-live="polite"></p>
+          <div id="review-list"></div>
+          <div class="review-pages"><button id="review-prev" type="button">前へ</button><span id="review-page"></span><button id="review-next" type="button">次へ</button></div>
+          <div class="review-actions"><button id="review-export" type="button" disabled>確認済みをCSV保存</button><button id="review-backup" type="button" disabled>作業中の全件をCSV保存</button></div>
+          <p class="review-note">修正は入力するたびにこの端末に保存します。修正した明細は未確認に戻ります。ブラウザーのデータを消すと保存内容も消えるため、CSVも保存してください。</p>
+          <p class="review-note">この確認一覧はホームの経費合計・端末バックアップとは別に保存します。CSVを別の端末へ読み込むと、再確認のため全件が未確認になります。PCにも修正を反映する場合は、保存したCSVを渡してください。DiscordやPCへ自動で送り返す機能はありません。</p>
+        </section>
+
         <!-- テーマの詳細設定 -->
         <section id="screen-theme-settings" class="screen-panel" aria-labelledby="theme-settings-title">
           <button class="settings-back-button" id="btn-settings-back" type="button"><i data-lucide="arrow-left"></i> テーマに戻る</button>
@@ -253,6 +267,9 @@
           <i data-lucide="receipt"></i>
           <span>履歴一覧</span>
         </button>
+        <button class="nav-item" data-target="screen-review">
+          <i data-lucide="clipboard-check"></i><span>結果確認</span>
+        </button>
       </nav>
 
     </div>
@@ -328,5 +345,7 @@
   <script src="guide.js"></script>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="relay.js"></script>
+  <script src="review-data.js"></script>
+  <script src="review.js"></script>
 </body>
 </html>

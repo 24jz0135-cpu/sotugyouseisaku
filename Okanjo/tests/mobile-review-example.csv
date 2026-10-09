@@ -1,0 +1,3 @@
+receiptId,date,vendor,amount,category,confidence
+CHECK-001,2026-10-09,動作確認用文具店,1250,消耗品費,0.9
+CHECK-002,2026-10-09,動作確認用交通機関,480,旅費交通費,0.8
