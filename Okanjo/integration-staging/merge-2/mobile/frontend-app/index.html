@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Instant Ledger - 現場の経費ファクト記録</title>
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons (CDN) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="guide.css">
+  <link rel="stylesheet" href="review.css">
+  <script>
+    const savedTheme = localStorage.getItem('instant-ledger-theme');
+    if (savedTheme && savedTheme !== 'light') document.documentElement.dataset.theme = savedTheme;
+  </script>
+</head>
+<body>
+
+  <!-- メインコンテナ：スマホのシミュレーター風に表示 -->
+  <div class="phone-wrapper">
+    <div class="phone-container">
+      
+      <!-- ステータスバー（スマホらしさの演出） -->
+      <div class="phone-status-bar">
+        <span class="time" id="status-time">10:30</span>
+        <div class="status-icons">
+          <i data-lucide="wifi" class="icon-small"></i>
+          <i data-lucide="battery" class="icon-small"></i>
+        </div>
+      </div>
+
+      <!-- アプリヘッダー -->
+      <header class="app-header">
+        <div class="user-profile">
+          <div class="avatar">
+            <i data-lucide="store" class="avatar-icon"></i>
+          </div>
+          <div class="user-info">
+            <h1 class="restaurant-name">新宿ビストロ・エッジ</h1>
+            <span class="tax-badge"><i data-lucide="award" class="icon-tiny"></i> 青色申告 (BLUE)</span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="btn-help" id="btn-help" type="button" aria-label="使い方ガイドを開く" aria-haspopup="dialog" aria-controls="usage-guide" title="使い方ガイド">?</button>
+          <button class="btn-theme" id="btn-theme" type="button" aria-label="テーマを選択" title="テーマを選択" aria-expanded="false" aria-controls="theme-menu">
+            <i data-lucide="palette"></i>
+          </button>
+          <button class="btn-refresh" id="btn-refresh" title="データを更新">
+            <i data-lucide="rotate-cw"></i>
+          </button>
+        </div>
+        <div class="theme-menu hidden" id="theme-menu" role="dialog" aria-label="カラーテーマを選択">
+          <p class="theme-menu-title">カラーテーマ</p>
+          <button class="theme-option active" type="button" data-theme="light"><span class="theme-swatch theme-light"></span><span>ライト</span></button>
+          <button class="theme-option" type="button" data-theme="dark"><span class="theme-swatch theme-dark"></span><span>ダーク</span></button>
+          <button class="theme-option" type="button" data-theme="amber"><span class="theme-swatch theme-amber"></span><span>ブラウン</span></button>
+          <button class="theme-option" type="button" data-theme="ocean"><span class="theme-swatch theme-ocean"></span><span>オーシャン</span></button>
+          <button class="theme-option" type="button" data-theme="forest"><span class="theme-swatch theme-forest"></span><span>フォレスト</span></button>
+          <div class="theme-menu-divider" aria-hidden="true"></div>
+          <button class="theme-settings-link" id="btn-theme-settings" type="button"><i data-lucide="sliders-horizontal"></i><span>詳細設定</span><i data-lucide="chevron-right" class="settings-chevron"></i></button>
+        </div>
+      </header>
+
+      <!-- 画面エリア (タブによって切り替える) -->
+      <main class="app-content">
+
+        <!-- 1. ホーム画面 -->
+        <section id="screen-home" class="screen-panel active">
+          <div class="dashboard-heading">
+            <h2 class="section-title">ダッシュボード</h2>
+            <time class="dashboard-date" id="dashboard-date"></time>
+          </div>
+          
+          <!-- サマリーカード -->
+          <div class="summary-grid">
+            <div class="summary-card total" data-photo-widget="total">
+              <span class="card-label">今月の経費合計</span>
+              <span class="card-value" id="summary-total">¥0</span>
+              <span class="card-trend text-up"><i data-lucide="trending-up" class="icon-tiny"></i> 前月比 +5.2%</span>
+              <svg class="summer-sun" viewBox="0 0 88 88" aria-hidden="true">
+                <circle cx="44" cy="44" r="21" />
+                <path d="M44 9v8M44 71v8M9 44h8M71 44h8M19.3 19.3l5.7 5.7M63 63l5.7 5.7M68.7 19.3L63 25M25 63l-5.7 5.7" />
+              </svg>
+            </div>
+            
+            <div class="summary-sub-grid">
+              <div class="summary-card pending" data-photo-widget="pending">
+                <span class="card-label">未確定ファクト</span>
+                <span class="card-value" id="summary-pending-count">0 件</span>
+                <span class="card-value-sub" id="summary-pending-amount">¥0</span>
+              </div>
+              <div class="summary-card verified" data-photo-widget="verified">
+                <span class="card-label">確定済み経費</span>
+                <span class="card-value" id="summary-verified-count">0 件</span>
+                <span class="card-value-sub" id="summary-verified-amount">¥0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 経費カテゴリ割合 (視覚的メータ) -->
+          <div class="analytics-section" data-photo-widget="categories">
+            <h3 class="subsection-title">経費カテゴリ内訳</h3>
+            <div class="category-bars" id="category-chart">
+              <!-- JSで動的に構築します -->
+              <div class="no-data-msg">経費データがありません</div>
+            </div>
+          </div>
+
+          <!-- 直近の未確定項目クイックアクセス -->
+          <div class="recent-section" data-photo-widget="recent">
+            <div class="section-header-link">
+              <h3 class="subsection-title">要確認の現場ファクト</h3>
+            </div>
+            <div class="recent-list" id="recent-pending-list">
+              <!-- JSで未確定データを動的に描画 -->
+              <div class="loading-spinner">
+                <i data-lucide="loader" class="spin"></i>
+                <span>読み込み中...</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- 2. レシート保管画面 -->
+        <section id="screen-scan" class="screen-panel">
+          <h2 class="section-title">レシートを端末に保存</h2>
+          <section class="receipt-capture-card">
+            <i data-lucide="camera" class="receipt-capture-icon"></i>
+            <h3>撮影した画像を保管する</h3>
+            <p>ここでは文字の読み取りやAI解析はしません。画像はこの端末に保存し、あとでPCのOISO2へ送って解析します。</p>
+            <label class="btn-primary btn-glow receipt-capture-button">
+              <i data-lucide="camera"></i><span>写真を撮影・追加する</span>
+              <input id="input-quick-receipt" type="file" accept="image/*" capture="environment" multiple hidden>
+            </label>
+            <p class="local-evidence-note"><i data-lucide="shield-check"></i> 画像はこの端末内に保存されます</p>
+            <p id="receipt-capture-status" class="receipt-capture-status" role="status"></p>
+          </section>
+        </section>
+
+
+        <!-- 3. 履歴画面 -->
+        <section id="screen-history" class="screen-panel">
+          <h2 class="section-title">記録データ履歴</h2>
+          
+          <div class="filter-bar">
+            <button class="filter-tab active" data-filter="all">すべて</button>
+            <button class="filter-tab" data-filter="PENDING">未確定</button>
+            <button class="filter-tab" data-filter="VERIFIED">確定済み</button>
+          </div>
+
+          <section class="backup-panel" data-photo-widget="backup" aria-labelledby="backup-title">
+            <div>
+              <h3 id="backup-title">端末バックアップ</h3>
+              <p>会計データと保存済みレシート画像を、PCに <code>.oaiso</code> ファイルとして保存できます。</p>
+            </div>
+            <div class="backup-actions">
+              <button class="btn-backup" id="btn-export-backup" type="button"><i data-lucide="download"></i> バックアップ</button>
+              <label class="btn-restore"><i data-lucide="upload"></i> 復元<input id="input-restore-backup" type="file" accept=".oaiso,application/json" hidden></label>
+            </div>
+          </section>
+
+          <div class="history-list" id="history-items-list">
+            <!-- JSで動的に描画 -->
+            <div class="loading-spinner">
+              <i data-lucide="loader" class="spin"></i>
+              <span>読み込み中...</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 解析結果の確認 -->
+        <section id="screen-review" class="screen-panel" aria-labelledby="review-title">
+          <h2 class="section-title" id="review-title">解析結果をチェック</h2>
+          <p class="review-intro">PCで解析したレシートのCSVを読み込み、店舗名・日付・金額・科目を確認して修正できます。</p>
+          <label class="review-import">解析CSVを読み込む<input id="review-import" type="file" accept=".csv,text/csv" hidden></label>
+          <div class="review-toolbar"><p id="review-summary"></p><label>表示 <select id="review-filter"><option value="all">すべて</option><option value="pending">未確認</option><option value="confirmed">確認済み</option></select></label></div>
+          <p id="review-status" role="status" aria-live="polite"></p>
+          <div id="review-list"></div>
+          <div class="review-pages"><button id="review-prev" type="button">前へ</button><span id="review-page"></span><button id="review-next" type="button">次へ</button></div>
+          <div class="review-actions"><button id="review-export" type="button" disabled>確認済みをCSV保存</button><button id="review-backup" type="button" disabled>作業中の全件をCSV保存</button></div>
+          <p class="review-note">修正は入力のたびにこの端末へ保存されます。修正した明細は未確認に戻るため、確認後に「内容を確認済みにする」を押してください。</p>
+          <p class="review-note">確認済みCSVをPCへ渡すと修正内容を反映できます。ブラウザーのデータを消す前に、作業中の全件もCSVで保存してください。</p>
+        </section>
+
+        <!-- テーマの詳細設定 -->
+        <section id="screen-theme-settings" class="screen-panel" aria-labelledby="theme-settings-title">
+          <button class="settings-back-button" id="btn-settings-back" type="button"><i data-lucide="arrow-left"></i> テーマに戻る</button>
+          <div class="settings-page-heading">
+            <p class="settings-eyebrow">THEME CUSTOMIZATION</p>
+            <h2 class="section-title" id="theme-settings-title">詳細設定</h2>
+            <p>背景やウィジェットに好きな写真を設定できます。</p>
+          </div>
+
+          <section class="theme-presets-panel" aria-labelledby="theme-presets-title">
+            <div class="theme-presets-heading">
+              <div><h3 id="theme-presets-title">見た目を保存</h3><p>背景やウィジェットの設定をまとめて保存できます。</p></div>
+              <i data-lucide="layers-2" aria-hidden="true"></i>
+            </div>
+            <div class="theme-preset-create-row">
+              <input id="input-theme-preset-name" type="text" maxlength="24" placeholder="例：春のテーマ" aria-label="保存する設定の名前">
+              <button id="btn-save-theme-preset" type="button"><i data-lucide="bookmark-plus"></i> 保存</button>
+            </div>
+            <p class="theme-preset-status" id="theme-preset-status" role="status" aria-live="polite"></p>
+            <div class="theme-preset-list" id="theme-preset-list"></div>
+            <p class="theme-preset-empty" id="theme-preset-empty">保存した設定はありません。</p>
+          </section>
+
+          <section class="theme-settings-card" aria-labelledby="background-settings-title">
+            <div class="settings-card-icon"><i data-lucide="image"></i></div>
+            <div class="settings-card-copy">
+              <h3 id="background-settings-title">背景</h3>
+              <p>アプリの背景に写真を設定します。</p>
+            </div>
+            <div class="settings-card-actions">
+              <button class="settings-reset-button hidden" type="button" data-photo-reset="background">リセット</button>
+              <button class="settings-choose-button" type="button" data-photo-target="background">写真を選ぶ</button>
+            </div>
+          </section>
+          <label class="background-photo-dim-option" for="toggle-background-photo-dim">
+            <span><strong>背景写真を薄く表示</strong><small>画面の文字やカードを読みやすくします。</small></span>
+            <input id="toggle-background-photo-dim" type="checkbox" checked>
+            <span class="settings-toggle-track" aria-hidden="true"></span>
+          </label>
+
+          <label class="widget-photo-target-option" for="select-photo-widget">写真を設定するウィジェット
+            <select id="select-photo-widget">
+              <option value="total">今月の経費合計</option>
+              <option value="pending">未確定ファクト</option>
+              <option value="verified">確定済み経費</option>
+              <option value="categories">経費カテゴリ内訳</option>
+              <option value="recent">要確認の現場ファクト</option>
+              <option value="backup">端末バックアップ</option>
+              <option value="relay">PCへ送信（Relay）</option>
+            </select>
+          </label>
+          <section class="theme-settings-card" aria-labelledby="widget-settings-title">
+            <div class="settings-card-icon"><i data-lucide="layout-grid"></i></div>
+            <div class="settings-card-copy">
+              <h3 id="widget-settings-title">ウィジェット</h3>
+              <p>ウィジェットごとに写真を設定します。</p>
+            </div>
+            <div class="settings-card-actions">
+              <button class="settings-reset-button hidden" type="button" data-photo-reset="widget">リセット</button>
+              <button class="settings-choose-button" type="button" data-photo-target="widget">写真を選ぶ</button>
+            </div>
+          </section>
+          <label class="background-photo-dim-option" for="toggle-widget-photo-dim">
+            <span><strong id="widget-photo-dim-title">選択中のウィジェット写真を薄く表示</strong><small>選択中のウィジェットだけに適用します。</small></span>
+            <input id="toggle-widget-photo-dim" type="checkbox" checked>
+            <span class="settings-toggle-track" aria-hidden="true"></span>
+          </label>
+          <p class="settings-coming-soon">写真を選んだあと、表示範囲の調整を追加する予定です。</p>
+        </section>
+
+      </main>
+
+      <!-- ボトムナビゲーションバー -->
+      <nav class="app-nav">
+        <button class="nav-item active" data-target="screen-home">
+          <i data-lucide="layout-dashboard"></i>
+          <span>ホーム</span>
+        </button>
+        <button class="nav-item" data-target="screen-scan">
+          <i data-lucide="camera" class="nav-icon-main"></i>
+          <span>レシート保管</span>
+        </button>
+        <button class="nav-item" data-target="screen-history">
+          <i data-lucide="receipt"></i>
+          <span>履歴一覧</span>
+        </button>
+        <button class="nav-item" data-target="screen-review">
+          <i data-lucide="clipboard-check"></i>
+          <span>結果確認</span>
+        </button>
+      </nav>
+
+    </div>
+  </div>
+
+  <div class="photo-picker-modal hidden" id="photo-picker-modal" role="dialog" aria-modal="true" aria-labelledby="photo-picker-title">
+    <button class="photo-picker-backdrop" type="button" data-close-photo-picker aria-label="閉じる"></button>
+    <div class="photo-picker-content">
+      <div class="photo-picker-header">
+        <div><p class="modal-eyebrow">PHOTO LIBRARY</p><h2 id="photo-picker-title">保存した写真</h2></div>
+        <button class="btn-close" id="btn-close-photo-picker" type="button" aria-label="閉じる"><i data-lucide="x"></i></button>
+      </div>
+      <p class="photo-picker-description">写真を選ぶか、新しい写真を端末から追加してください。</p>
+      <div class="saved-photo-grid" id="saved-photo-grid"></div>
+      <p class="photo-library-empty" id="photo-library-empty">保存した写真はまだありません。</p>
+      <div class="photo-selection-preview hidden" id="photo-selection-preview">
+        <img id="photo-selection-image" alt="選択中の写真のプレビュー">
+        <div class="photo-selection-details"><span id="photo-selection-name"></span><button id="btn-apply-selected-photo" type="button">範囲を調整</button></div>
+      </div>
+      <label class="photo-upload-button"><i data-lucide="upload"></i> 写真をアップロード
+        <input id="input-theme-photo" type="file" accept="image/*" hidden>
+      </label>
+      <p class="photo-picker-status" id="photo-picker-status" role="status" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <div class="photo-crop-modal hidden" id="photo-crop-modal" role="dialog" aria-modal="true" aria-labelledby="photo-crop-title">
+    <div class="photo-crop-content">
+      <div class="photo-picker-header">
+        <div><p class="modal-eyebrow">ADJUST PHOTO</p><h2 id="photo-crop-title">表示範囲を調整</h2></div>
+        <button class="btn-close" id="btn-cancel-photo-crop" type="button" aria-label="範囲選択を閉じる"><i data-lucide="x"></i></button>
+      </div>
+      <p class="photo-crop-help">写真をドラッグして位置を調整し、スライダーで拡大・縮小してください。</p>
+      <div class="photo-crop-canvas-wrap"><canvas id="photo-crop-canvas" aria-label="写真の切り抜き範囲"></canvas></div>
+      <label class="photo-crop-zoom" for="photo-crop-zoom"><span>拡大・縮小</span><input id="photo-crop-zoom" type="range" min="1" max="3" step="0.01" value="1"></label>
+      <div class="photo-crop-actions">
+        <button id="btn-cancel-photo-crop-text" type="button">キャンセル</button>
+        <button id="btn-save-photo-crop" type="button">この範囲を使う</button>
+      </div>
+      <p class="photo-crop-status" id="photo-crop-status" role="status" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <div class="receipt-modal hidden" id="receipt-modal" role="dialog" aria-modal="true" aria-labelledby="receipt-modal-title">
+    <div class="receipt-modal-backdrop" data-close-receipt-modal></div>
+    <div class="receipt-modal-content">
+      <div class="receipt-modal-header">
+        <div><p class="modal-eyebrow">保存済みの証憑</p><h2 id="receipt-modal-title">レシート画像</h2></div>
+        <button class="btn-close" id="btn-close-receipt-modal" type="button" aria-label="閉じる"><i data-lucide="x"></i></button>
+      </div>
+      <img id="receipt-modal-image" alt="保存済みレシート">
+      <p id="receipt-modal-empty" class="hidden">この端末にはレシート画像がありません。</p>
+    </div>
+  </div>
+
+  <dialog class="usage-guide" id="usage-guide" aria-labelledby="guide-heading">
+    <div class="guide-top"><h2 id="guide-heading">使い方ガイド</h2><button class="guide-close" id="guide-close" type="button" aria-label="ガイドを閉じる" autofocus>×</button></div>
+    <div aria-live="polite" aria-atomic="true">
+      <span class="guide-count" id="guide-count"></span>
+      <div class="guide-art" id="guide-icon" aria-hidden="true"></div>
+      <p class="guide-label" id="guide-label"></p>
+      <h3 class="guide-title" id="guide-title"></h3>
+      <p class="guide-text" id="guide-text"></p>
+      <p class="guide-tip" id="guide-tip"></p>
+    </div>
+    <div class="guide-dots" aria-label="ガイドのステップ">
+      <button class="guide-dot" type="button" aria-label="ステップ1へ"></button><button class="guide-dot" type="button" aria-label="ステップ2へ"></button><button class="guide-dot" type="button" aria-label="ステップ3へ"></button><button class="guide-dot" type="button" aria-label="ステップ4へ"></button><button class="guide-dot" type="button" aria-label="ステップ5へ"></button><button class="guide-dot" type="button" aria-label="ステップ6へ"></button><button class="guide-dot" type="button" aria-label="ステップ7へ"></button>
+    </div>
+    <div class="guide-actions"><button class="guide-back" id="guide-back" type="button">戻る</button><button class="guide-next" id="guide-next" type="button">次へ →</button></div>
+  </dialog>
+
+  <script src="app.js"></script>
+  <script src="guide.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="relay.js"></script>
+  <script src="review-data.js"></script>
+  <script src="review.js"></script>
+</body>
+</html>
