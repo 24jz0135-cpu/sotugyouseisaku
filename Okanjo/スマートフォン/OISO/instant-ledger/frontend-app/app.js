@@ -7,88 +7,9 @@ const LOCAL_DB_KEY = 'instant_ledger_local_db';
 
 let appState = {
   isOffline: false,
-  currentReceipt: null,
   records: [],
-  currentTab: 'screen-home',
-  // 擬似GPS座標（豊洲市場周辺をデフォルトに）
-  gps: {
-    latitude: 35.6445,
-    longitude: 139.7915
-  },
-  sensorType: 'CAMERA',
-  isRecording: false
+  currentTab: 'screen-home'
 };
-
-// 実デバイス用メディア・認識オブジェクト
-let activeVideoStream = null;
-let audioContext = null;
-let audioStream = null;
-let speechRecognitionObj = null;
-
-// ==========================================
-// Mock Data Generators for Simulation
-// ==========================================
-const MOCK_RECEIPTS = [
-  {
-    vendor: '鮮魚田中 豊洲店',
-    amount: 15400,
-    category: '仕入高',
-    rawText: 'レシート: 鮮魚田中\n日付: 2026/06/11\n本マグロ 中落ち ¥8,900\n真鯛 2匹 ¥6,500\n合計 ￥15,400',
-    gps: { lat: 35.6445, lng: 139.7915 } // 豊洲市場
-  },
-  {
-    vendor: '大黒屋青果 新宿店',
-    amount: 6800,
-    category: '仕入高',
-    rawText: '領収書: 大黒屋青果\nアボカド 1箱 ¥2,800\nパクチー 大袋 ¥1,500\nレモン 20個 ¥2,500\n計 ￥6,800',
-    gps: { lat: 35.6909, lng: 139.7003 } // 新宿
-  },
-  {
-    vendor: '築地ミート 本店',
-    amount: 24500,
-    category: '仕入高',
-    rawText: '築地ミート お買い上げ明細\n黒毛和牛 ロース 2kg ¥18,000\n国産豚バラ 3kg ¥6,500\n合計金額 ￥24,500',
-    gps: { lat: 35.6655, lng: 139.7705 } // 築地
-  },
-  {
-    vendor: '業務スーパー 新宿中央店',
-    amount: 3200,
-    category: '仕入高',
-    rawText: 'レシート 業務スーパー\nオリーブオイル 5L ¥2,100\nパスタ 5kg ¥1,100\n計 ￥3,200',
-    gps: { lat: 35.6938, lng: 139.7034 } // 新宿
-  },
-  {
-    vendor: 'ダイソー 新宿サブナード店',
-    amount: 1320,
-    category: '消耗品費',
-    rawText: '100円ショップ ダイソー\n紙コップ 200pcs ¥440\nペーパーナプキン ¥330\n除菌スプレー ¥550\n合計 ￥1,320',
-    gps: { lat: 35.6925, lng: 139.7015 } // 新宿
-  }
-];
-
-const MOCK_VOICES = [
-  {
-    text: '音声メモ: 「業務スーパーでトマトとパセリ、あとオリーブオイル買って現金で4,800円」',
-    vendor: '業務スーパー 新宿中央店',
-    amount: 4800,
-    category: '仕入高',
-    gps: { lat: 35.6938, lng: 139.7034 }
-  },
-  {
-    text: '音声メモ: 「ダイソーで店舗のアルコール消毒用シートとペーパータオル買って1,650円」',
-    vendor: 'ダイソー 新宿サブナード店',
-    amount: 1650,
-    category: '消耗品費',
-    gps: { lat: 35.6925, lng: 139.7015 }
-  },
-  {
-    text: '音声メモ: 「ガソリンスタンドで配達車の給油、カード払いで5,400円」',
-    vendor: 'エネオス 新宿SS',
-    amount: 5400,
-    category: '旅費交通費',
-    gps: { lat: 35.6895, lng: 139.6917 }
-  }
-];
 
 // ==========================================
 // DOM Elements
@@ -141,28 +62,9 @@ const documentElements = {
   themePresetList: document.getElementById('theme-preset-list'),
   themePresetEmpty: document.getElementById('theme-preset-empty'),
 
-  // Sensors (Scan/Voice)
-  tabCamera: document.getElementById('tab-camera'),
-  tabVoice: document.getElementById('tab-voice'),
-  panelCamera: document.getElementById('panel-camera'),
-  panelVoice: document.getElementById('panel-voice'),
-  btnCapture: document.getElementById('btn-capture'),
-  btnRecord: document.getElementById('btn-record'),
-  btnRecordText: document.getElementById('btn-record-text'),
-  voiceWaveContainer: document.getElementById('voice-wave-container'),
-  cameraLocation: document.getElementById('camera-location'),
-  voiceLocation: document.getElementById('voice-location'),
-  
-  // Preview Card & Form
-  factPreviewCard: document.getElementById('fact-preview-card'),
-  inputVendor: document.getElementById('input-vendor'),
-  inputAmount: document.getElementById('input-amount'),
-  inputCategory: document.getElementById('input-category'),
-  inputRawText: document.getElementById('input-rawtext'),
-  spanLat: document.getElementById('span-lat'),
-  spanLng: document.getElementById('span-lng'),
-  btnSaveFact: document.getElementById('btn-save-fact'),
-  btnCancelPreview: document.getElementById('btn-cancel-preview'),
+  // Receipt capture
+  inputQuickReceipt: document.getElementById('input-quick-receipt'),
+  receiptCaptureStatus: document.getElementById('receipt-capture-status'),
   
   // History
   filterTabs: document.querySelectorAll('.filter-tab'),
@@ -172,9 +74,7 @@ const documentElements = {
   receiptModal: document.getElementById('receipt-modal'),
   receiptModalImage: document.getElementById('receipt-modal-image'),
   receiptModalEmpty: document.getElementById('receipt-modal-empty'),
-  btnCloseReceiptModal: document.getElementById('btn-close-receipt-modal'),
-  inputQuickReceipt: document.getElementById('input-quick-receipt'),
-  receiptCaptureStatus: document.getElementById('receipt-capture-status')
+  btnCloseReceiptModal: document.getElementById('btn-close-receipt-modal')
 };
 
 // ==========================================
@@ -208,6 +108,13 @@ function updateStatusTime() {
   const timeStr = `${hours}:${minutes}`;
   const statusTimeEl = document.getElementById('status-time');
   if (statusTimeEl) statusTimeEl.textContent = timeStr;
+  const dashboardDateEl = document.getElementById('dashboard-date');
+  if (dashboardDateEl) {
+    dashboardDateEl.dateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    dashboardDateEl.textContent = new Intl.DateTimeFormat('ja-JP', {
+      month: 'long', day: 'numeric', weekday: 'long'
+    }).format(now);
+  }
 }
 
 // ==========================================
@@ -569,6 +476,7 @@ function applyThemePreset(preset) {
     widget.style.backgroundImage = '';
     widget.style.backgroundSize = '';
     widget.style.backgroundPosition = '';
+    widget.classList.remove('photo-background-set');
   });
   document.querySelector('[data-photo-target="background"]').textContent = '写真を選ぶ';
   document.querySelector('[data-photo-reset="background"]').classList.add('hidden');
@@ -698,13 +606,17 @@ function getPhotoCropGeometry() {
   const height = canvas.clientHeight || 300;
   const aspect = getPhotoCropAspectRatio();
   const image = photoCropState.image;
-  const baseScale = Math.min(width * 0.86 / image.naturalWidth, height * 0.78 / image.naturalHeight);
+  const fitScale = Math.min(width * 0.86 / image.naturalWidth, height * 0.78 / image.naturalHeight);
+  // Keep the background photo larger than the viewport so it has room to pan
+  // toward every edge, including the top and left.
+  const baseScale = fitScale * (activePhotoTarget === 'background' ? 1.35 : 1);
   const imageWidth = image.naturalWidth * baseScale;
   const imageHeight = image.naturalHeight * baseScale;
-  let cropWidth = Math.min(width * 0.76, imageWidth * 0.9, imageHeight * 0.9 * aspect);
+  const imageWindowRatio = activePhotoTarget === 'background' ? 0.7 : 0.9;
+  let cropWidth = Math.min(width * 0.76, imageWidth * imageWindowRatio, imageHeight * imageWindowRatio * aspect);
   let cropHeight = cropWidth / aspect;
-  if (cropHeight > imageHeight * 0.9) {
-    cropHeight = imageHeight * 0.9;
+  if (cropHeight > imageHeight * imageWindowRatio) {
+    cropHeight = imageHeight * imageWindowRatio;
     cropWidth = cropHeight * aspect;
   }
   return { width, height, cropX: (width - cropWidth) / 2, cropY: (height - cropHeight) / 2, cropWidth, cropHeight, baseScale };
@@ -715,8 +627,12 @@ function constrainPhotoCropPosition(geometry) {
   const scale = geometry.baseScale * state.zoom;
   const imageWidth = state.image.naturalWidth * scale;
   const imageHeight = state.image.naturalHeight * scale;
-  state.centerX = Math.min(geometry.cropX + geometry.cropWidth / 2, Math.max(geometry.cropX + geometry.cropWidth - imageWidth / 2, state.centerX));
-  state.centerY = Math.min(geometry.cropY + geometry.cropHeight / 2, Math.max(geometry.cropY + geometry.cropHeight - imageHeight / 2, state.centerY));
+  const minCenterX = geometry.cropX + geometry.cropWidth - imageWidth / 2;
+  const maxCenterX = geometry.cropX + imageWidth / 2;
+  const minCenterY = geometry.cropY + geometry.cropHeight - imageHeight / 2;
+  const maxCenterY = geometry.cropY + imageHeight / 2;
+  state.centerX = Math.min(maxCenterX, Math.max(minCenterX, state.centerX));
+  state.centerY = Math.min(maxCenterY, Math.max(minCenterY, state.centerY));
   return { scale, imageWidth, imageHeight };
 }
 
@@ -848,7 +764,7 @@ function applyThemePhoto(target, url) {
   if (resetButton) resetButton.classList.remove('hidden');
   if (!isWidget) {
     const dimPhoto = documentElements.toggleBackgroundPhotoDim.checked;
-    const overlay = dimPhoto ? 'linear-gradient(rgba(255,255,255,.76), rgba(255,255,255,.76)), ' : '';
+    const overlay = dimPhoto ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 1 1\'%3E%3Crect width=\'1\' height=\'1\' fill=\'white\' fill-opacity=\'.76\'/%3E%3C/svg%3E"), ' : '';
     document.querySelector('.app-content').style.backgroundImage = `${overlay}url("${url}")`;
     document.querySelector('.app-content').style.backgroundSize = 'cover';
     document.querySelector('.app-content').style.backgroundPosition = 'center';
@@ -857,10 +773,11 @@ function applyThemePhoto(target, url) {
     const widget = document.querySelector(`[data-photo-widget="${widgetId}"]`);
     if (widget) {
       const dimPhoto = getWidgetDimSetting(widgetId);
-      const overlay = dimPhoto ? 'linear-gradient(rgba(255,255,255,.72), rgba(255,255,255,.72)), ' : '';
+      const overlay = dimPhoto ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 1 1\'%3E%3Crect width=\'1\' height=\'1\' fill=\'white\' fill-opacity=\'.72\'/%3E%3C/svg%3E"), ' : '';
       widget.style.backgroundImage = `${overlay}url("${url}")`;
       widget.style.backgroundSize = 'cover';
       widget.style.backgroundPosition = 'center';
+      widget.classList.add('photo-background-set');
     }
   }
 }
@@ -923,6 +840,7 @@ function resetThemePhoto(target) {
       widget.style.backgroundImage = '';
       widget.style.backgroundSize = '';
       widget.style.backgroundPosition = '';
+      widget.classList.remove('photo-background-set');
     }
     updateSelectedWidgetResetState();
   }
@@ -1000,432 +918,14 @@ function switchTab(screenId) {
 }
 
 // ==========================================
-// GPS Location & Reverse Geocoding
-// ==========================================
-async function updateLocation() {
-  const loadingHTML = `<i data-lucide="loader" class="spin"></i> 位置情報を取得中...`;
-  
-  if (appState.sensorType === 'CAMERA') {
-    documentElements.cameraLocation.innerHTML = loadingHTML;
-  } else {
-    documentElements.voiceLocation.innerHTML = loadingHTML;
-  }
-  lucide.createIcons();
-
-  if (navigator.geolocation) {
-    const options = {
-      enableHighAccuracy: false, // デスクトップや屋内での取得成功率を高めるためfalseに
-      timeout: 10000,            // タイムアウトを10秒に緩和
-      maximumAge: 60000          // 60秒以内のキャッシュ位置情報の利用を許可
-    };
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        
-        appState.gps = { latitude: lat, longitude: lng };
-        
-        // フォーム用スパンを更新
-        documentElements.spanLat.textContent = lat.toFixed(4);
-        documentElements.spanLng.textContent = lng.toFixed(4);
-
-        // 逆ジオコーディングで日本語住所を取得
-        const address = await reverseGeocode(lat, lng);
-        
-        const successHTML = `<i data-lucide="map-pin"></i> ${address}`;
-        if (appState.sensorType === 'CAMERA') {
-          documentElements.cameraLocation.innerHTML = successHTML;
-        } else {
-          documentElements.voiceLocation.innerHTML = successHTML;
-        }
-        lucide.createIcons();
-      },
-      (error) => {
-        console.warn("Geolocation API error, falling back to mock simulator.", error);
-        useFallbackLocation("位置情報取得失敗 / ");
-      },
-      options
-    );
-  } else {
-    console.warn("Geolocation is not supported by this browser. Falling back to mock simulator.");
-    useFallbackLocation("非対応ブラウザ / ");
-  }
-}
-
-// 住所解決（OpenStreetMap Nominatim）
-async function reverseGeocode(lat, lng) {
-  try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=ja`;
-    const response = await fetch(url, {
-      headers: {
-        'Accept-Language': 'ja'
-      }
-    });
-    if (!response.ok) throw new Error('Geocoding fetch failed');
-    const data = await response.json();
-    
-    if (data && data.address) {
-      const addr = data.address;
-      // 日本語の住所パーツを順に結合
-      const prefecture = addr.province || addr.prefecture || addr.state || '';
-      const city = addr.city || addr.town || addr.city_district || addr.ward || addr.suburb || '';
-      const neighbourhood = addr.neighbourhood || '';
-      const road = addr.road || '';
-      const name = data.name || '';
-      
-      let displayAddress = `${prefecture}${city}${neighbourhood}${road}`;
-      
-      // 建物名や地名があれば追加
-      if (name && !displayAddress.includes(name)) {
-        displayAddress += ` (${name})`;
-      }
-      
-      return displayAddress.trim() || `緯度: ${lat.toFixed(4)}, 経度: ${lng.toFixed(4)}`;
-    }
-    return `緯度: ${lat.toFixed(4)}, 経度: ${lng.toFixed(4)}`;
-  } catch (error) {
-    console.error("Reverse geocoding error:", error);
-    return `緯度: ${lat.toFixed(4)}, 経度: ${lng.toFixed(4)}`;
-  }
-}
-
-// 許可拒否やエラー時のフォールバック位置設定
-function useFallbackLocation(reasonPrefix = "") {
-  if (appState.sensorType === 'CAMERA') {
-    appState.gps = { latitude: 35.6445, longitude: 139.7915 }; // 豊洲市場
-    documentElements.cameraLocation.innerHTML = `<i data-lucide="map-pin"></i> ${reasonPrefix}東京都江東区豊洲６丁目 (豊洲市場付近)`;
-  } else {
-    appState.gps = { latitude: 35.6909, longitude: 139.7003 }; // 新宿駅周辺
-    documentElements.voiceLocation.innerHTML = `<i data-lucide="map-pin"></i> ${reasonPrefix}東京都新宿区新宿３丁目 (業務スーパー付近)`;
-  }
-  
-  // フォーム用スパンを更新
-  documentElements.spanLat.textContent = appState.gps.latitude.toFixed(4);
-  documentElements.spanLng.textContent = appState.gps.longitude.toFixed(4);
-  
-  lucide.createIcons();
-}
-
-// ==========================================
-// Real Camera Hardware Controller
-// ==========================================
-async function startCamera() {
-  const videoEl = document.getElementById('camera-stream');
-  const capturedImgEl = document.getElementById('camera-captured-img');
-  const placeholderEl = document.getElementById('camera-preview-box');
-
-  if (!videoEl || !capturedImgEl || !placeholderEl) return;
-
-  // UI状態リセット
-  capturedImgEl.classList.add('hidden');
-  capturedImgEl.src = '';
-  placeholderEl.classList.add('hidden');
-  videoEl.classList.remove('hidden');
-
-  if (activeVideoStream) {
-    stopCamera();
-  }
-
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: "environment" } // 背面カメラを優先
-      },
-      audio: false
-    });
-    activeVideoStream = stream;
-    videoEl.srcObject = stream;
-  } catch (error) {
-    console.error("Camera access failed:", error);
-    // カメラ取得に失敗した場合はシミュレーション表示へ戻す
-    videoEl.classList.add('hidden');
-    placeholderEl.classList.remove('hidden');
-  }
-}
-
-function stopCamera() {
-  const videoEl = document.getElementById('camera-stream');
-  if (activeVideoStream) {
-    activeVideoStream.getTracks().forEach(track => track.stop());
-    activeVideoStream = null;
-  }
-  if (videoEl) {
-    videoEl.srcObject = null;
-    videoEl.classList.add('hidden');
-  }
-}
-
-function capturePhoto() {
-  const videoEl = document.getElementById('camera-stream');
-  const capturedImgEl = document.getElementById('camera-captured-img');
-  const placeholderEl = document.getElementById('camera-preview-box');
-
-  if (activeVideoStream && videoEl && capturedImgEl) {
-    const canvas = document.createElement('canvas');
-    canvas.width = videoEl.videoWidth || 640;
-    canvas.height = videoEl.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-
-    const dataUrl = canvas.toDataURL('image/jpeg');
-    capturedImgEl.src = dataUrl;
-    capturedImgEl.classList.remove('hidden');
-    appState.currentReceipt = {
-      id: `receipt_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
-      dataUrl,
-      createdAt: new Date().toISOString(),
-      mimeType: 'image/jpeg'
-    };
-
-    stopCamera();
-  } else {
-    // カメラが起動していなかった場合のモックフォールバック画像
-    if (capturedImgEl) {
-      capturedImgEl.src = 'https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=500&auto=format&fit=crop&q=60';
-      capturedImgEl.classList.remove('hidden');
-    }
-    appState.currentReceipt = null;
-    if (placeholderEl) {
-      placeholderEl.classList.add('hidden');
-    }
-  }
-}
-
-// ==========================================
-// Real Microphone & Speech Recognition
-// ==========================================
-function initSpeechRecognition() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    console.warn("Speech Recognition not supported in this browser.");
-    return null;
-  }
-
-  const recognition = new SpeechRecognition();
-  recognition.lang = 'ja-JP';
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
-
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    console.log("Speech transcript:", transcript);
-    handleSpeechResult(transcript);
-  };
-
-  recognition.onerror = (event) => {
-    console.error("Speech recognition error:", event.error);
-    if (event.error === 'not-allowed') {
-      alert("マイクのアクセス権限が拒否されています。");
-    }
-    stopRecording(true); // エラー時はモックデータでフォールバック
-  };
-
-  recognition.onend = () => {
-    if (appState.isRecording) {
-      stopRecording(false);
-    }
-  };
-
-  return recognition;
-}
-
-async function startRecording() {
-  if (appState.isRecording) return;
-  
-  appState.isRecording = true;
-  documentElements.btnRecordText.textContent = "音声入力中 (クリックで終了)...";
-  documentElements.voiceWaveContainer.classList.add('active');
-  documentElements.voiceLocation.innerHTML = `<i data-lucide="mic" class="spin"></i> 音声を解析中...`;
-  lucide.createIcons();
-
-  // 1. 音声認識を起動
-  if (!speechRecognitionObj) {
-    speechRecognitionObj = initSpeechRecognition();
-  }
-  
-  if (speechRecognitionObj) {
-    try {
-      speechRecognitionObj.start();
-    } catch (e) {
-      console.warn("SpeechRecognition already started:", e);
-    }
-  }
-
-  // 2. Web Audio Analyserによるマイク音量連動アニメーション
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    audioStream = stream;
-    
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioContext.createMediaStreamSource(stream);
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 32;
-    source.connect(analyser);
-    
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    function animateWave() {
-      if (!appState.isRecording) return;
-      requestAnimationFrame(animateWave);
-      
-      analyser.getByteFrequencyData(dataArray);
-      const bars = document.querySelectorAll('.wave-bar');
-      bars.forEach((bar, index) => {
-        const val = dataArray[index] || 0;
-        // マイク入力周波数を8px〜60pxの高さにマッピング
-        const height = Math.min(60, Math.max(8, (val / 255) * 60));
-        bar.style.height = `${height}px`;
-      });
-    }
-    
-    animateWave();
-  } catch (error) {
-    console.warn("Web Audio mic visualizer failed:", error);
-    // マイク音量取得が不可の場合は、ランダム波形でシミュレート
-    let timer = setInterval(() => {
-      if (!appState.isRecording) {
-        clearInterval(timer);
-        return;
-      }
-      const bars = document.querySelectorAll('.wave-bar');
-      bars.forEach(bar => {
-        const height = Math.floor(Math.random() * 40) + 10;
-        bar.style.height = `${height}px`;
-      });
-    }, 150);
-  }
-
-  // 自動タイムアウト（15秒）
-  setTimeout(() => {
-    if (appState.isRecording) {
-      stopRecording(false);
-    }
-  }, 15000);
-}
-
-function stopRecording(useMockFallback = false) {
-  if (!appState.isRecording) return;
-
-  appState.isRecording = false;
-  documentElements.btnRecordText.textContent = "音声メモを入力する";
-  documentElements.voiceWaveContainer.classList.remove('active');
-  lucide.createIcons();
-
-  // 音声認識停止
-  if (speechRecognitionObj) {
-    try {
-      speechRecognitionObj.stop();
-    } catch (e) {}
-  }
-
-  // オーディオコンテキスト破棄
-  if (audioStream) {
-    audioStream.getTracks().forEach(track => track.stop());
-    audioStream = null;
-  }
-  if (audioContext) {
-    audioContext.close();
-    audioContext = null;
-  }
-
-  // 位置情報更新
-  updateLocation();
-
-  if (useMockFallback) {
-    setTimeout(() => {
-      const idx = Math.floor(Math.random() * MOCK_VOICES.length);
-      const mock = MOCK_VOICES[idx];
-      handleSpeechResult(mock.text);
-    }, 500);
-  }
-}
-
-// 認識テキストの簡易構文解析＆フォーム投入
-function handleSpeechResult(text) {
-  documentElements.inputRawText.value = text;
-
-  let vendor = "名称未設定";
-  let amount = 0;
-  let category = "仕入高";
-
-  // 店舗名のキーワード一致
-  const vendors = ["業務スーパー", "ダイソー", "鮮魚田中", "大黒屋青果", "築地ミート", "ガソリンスタンド", "エネオス"];
-  for (const v of vendors) {
-    if (text.includes(v)) {
-      vendor = v;
-      if (v === "エネオス" || v === "ガソリンスタンド") vendor = "エネオス 新宿SS";
-      if (v === "業務スーパー") vendor = "業務スーパー 新宿中央店";
-      if (v === "ダイソー") vendor = "ダイソー 新宿サブナード店";
-      if (v === "鮮魚田中") vendor = "鮮魚田中 豊洲店";
-      if (v === "大黒屋青果") vendor = "大黒屋青果 新宿店";
-      if (v === "築地ミート") vendor = "築地ミート 本店";
-      break;
-    }
-  }
-  
-  if (vendor === "名称未設定") {
-    const match = text.match(/([^、。っ「」]*?)(で|にて)/);
-    if (match && match[1]) {
-      vendor = match[1].replace(/音声メモ:\s*「?/, "").trim();
-    }
-  }
-
-  // 金額（漢数字/算用数字）のパース
-  let cleanText = text.replace(/[０-９]/g, (s) => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
-  let numMatch = cleanText.match(/(\d+)\s*万\s*(\d*)\s*千?/) || cleanText.match(/(\d+)\s*万/) || cleanText.match(/(\d+)\s*千/) || cleanText.match(/(\d+)\s*円/) || cleanText.match(/[\d,]+/);
-  if (numMatch) {
-    const rawNum = numMatch[0].replace(/,/g, "");
-    if (rawNum.includes("万")) {
-      const parts = rawNum.split("万");
-      const man = parseInt(parts[0], 10) * 10000;
-      let sen = 0;
-      if (parts[1]) {
-        sen = parseInt(parts[1].replace("千", ""), 10);
-        if (sen < 10) sen = sen * 1000;
-      }
-      amount = man + sen;
-    } else if (rawNum.includes("千")) {
-      amount = parseInt(rawNum.replace("千", ""), 10) * 1000;
-    } else {
-      amount = parseInt(rawNum.replace("円", ""), 10) || 0;
-    }
-  }
-
-  // 勘定科目の推測
-  if (text.includes("消耗品") || text.includes("除菌") || text.includes("シート") || text.includes("紙コップ") || text.includes("ナプキン") || text.includes("ペン") || text.includes("封筒")) {
-    category = "消耗品費";
-  } else if (text.includes("ガソリン") || text.includes("タクシー") || text.includes("電車") || text.includes("切符") || text.includes("高速代") || text.includes("駐車代")) {
-    category = "旅費交通費";
-  } else if (text.includes("電気") || text.includes("ガス") || text.includes("水道") || text.includes("電気代")) {
-    category = "水道光熱費";
-  } else if (text.includes("仕入れ") || text.includes("トマト") || text.includes("マグロ") || text.includes("食材") || text.includes("肉") || text.includes("魚") || text.includes("青果")) {
-    category = "仕入高";
-  }
-
-  documentElements.inputVendor.value = vendor;
-  documentElements.inputAmount.value = amount || "";
-  documentElements.inputCategory.value = category;
-
-  documentElements.spanLat.textContent = appState.gps.latitude.toFixed(4);
-  documentElements.spanLng.textContent = appState.gps.longitude.toFixed(4);
-
-  // プレビューカード表示
-  documentElements.factPreviewCard.classList.remove('hidden');
-  documentElements.factPreviewCard.scrollIntoView({ behavior: 'smooth' });
-}
-
-// ==========================================
-// Receipt capture: 保存だけを行い、端末側では解析しない。
-// ==========================================
+// レシート撮影: 画像を端末内に保管し、後からPCへ送る。
 function initSensorControls() {
   documentElements.inputQuickReceipt.addEventListener('change', async event => {
     const files = [...event.target.files].filter(file => file.type.startsWith('image/'));
     if (!files.length) return;
     documentElements.receiptCaptureStatus.textContent = '端末内に保存しています…';
     try {
-      await Promise.all(files.map(async file => {
+      for (const file of files) {
         if (file.size > 15 * 1024 * 1024) throw new Error(`${file.name} は15MB以下にしてください`);
         const dataUrl = await new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -1439,8 +939,8 @@ function initSensorControls() {
           createdAt: new Date().toISOString(),
           mimeType: file.type
         });
-      }));
-      documentElements.receiptCaptureStatus.textContent = `${files.length}枚を端末に保存しました。履歴一覧からPCへ送信できます。`;
+      }
+      documentElements.receiptCaptureStatus.textContent = `${files.length}枚を端末に保存しました。履歴画面からPCへ送信できます。`;
     } catch (error) {
       documentElements.receiptCaptureStatus.textContent = `保存できませんでした: ${error.message}`;
     } finally {
@@ -1508,19 +1008,6 @@ async function fetchRecords() {
           vendor_name: '鮮魚田中 豊洲店',
           image_url: 'https://storage.cloudflare.com/receipts/001.jpg',
           status: 'VERIFIED'
-        },
-        {
-          id: 'exp_fact_002',
-          user_id: 'user_shinjuku_001',
-          timestamp: '2026-06-11 15:00:00',
-          latitude: 35.6909,
-          longitude: 139.7003,
-          sensor_type: 'VOICE',
-          raw_text: '音声メモ: 「業務スーパーでパセリとトマト、現金で2,300円」',
-          amount: 2300,
-          category: '仕入高',
-          vendor_name: '業務スーパー 新宿店',
-          status: 'PENDING'
         }
       ];
       localStorage.setItem('instant_ledger_local_db', JSON.stringify(mockSeeds));
@@ -1531,52 +1018,6 @@ async function fetchRecords() {
   // 各画面の再描画
   renderDashboard();
   renderHistory();
-}
-
-// 2. 経費のアップロード
-async function uploadRecord(payload) {
-  if (LOCAL_FIRST_MODE || appState.isOffline) {
-    // オフラインモード時の動作シミュレーション
-    const newRecord = {
-      id: 'local_record_' + Date.now(),
-      user_id: payload.userId,
-      timestamp: payload.timestamp,
-      latitude: payload.latitude,
-      longitude: payload.longitude,
-      sensor_type: payload.sensorType,
-      raw_text: payload.rawText,
-      amount: payload.amount,
-      category: payload.category,
-      vendor_name: payload.vendorName,
-      receipt_id: payload.receiptId,
-      status: 'PENDING'
-    };
-    appState.records.unshift(newRecord);
-    persistLocalRecords(appState.records);
-    appState.currentReceipt = null;
-    
-    setTimeout(() => {
-      documentElements.factPreviewCard.classList.add('hidden');
-      switchTab('screen-history');
-    }, 600);
-    return;
-  }
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/upload`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!response.ok) throw new Error('送信に失敗しました');
-    
-    // アップロード成功後、再読込して履歴タブへ移動
-    await fetchRecords();
-    documentElements.factPreviewCard.classList.add('hidden');
-    switchTab('screen-history');
-  } catch (error) {
-    alert("API送信エラー: " + error.message + "\nローカル開発サーバーが起動しているか確認してください。");
-  }
 }
 
 // 3. レコードの確定 (Verify)
