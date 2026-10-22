@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
@@ -13,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'data_store.dart';
+part 'web_design.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,43 +25,43 @@ void main() async {
 const _themes = <String, _Palette>{
   'light': _Palette(
     'ライト',
-    Color(0xfff7f4ed),
-    Color(0xff332b27),
-    Color(0xfffdfbf7),
-    Color(0xffa64b32),
-    Color(0xffd8cfc0),
+    Color(0xffffffff),
+    Color(0xff334155),
+    Color(0xfff8fafc),
+    Color(0xff493b35),
+    Color(0x14000000),
   ),
   'dark': _Palette(
     'ダーク',
-    Color(0xff17191b),
-    Color(0xfff2eee7),
-    Color(0xff222629),
-    Color(0xffb399e8),
-    Color(0xff41474b),
+    Color(0xff172033),
+    Color(0xffcbd5e1),
+    Color(0xff1e293b),
+    Color(0xffa78bfa),
+    Color(0x24e2e8f0),
   ),
   'brown': _Palette(
     'ブラウン',
-    Color(0xffeee4d5),
-    Color(0xff342821),
-    Color(0xfffbf8f2),
-    Color(0xff76513e),
-    Color(0xffd4c6b3),
+    Color(0xfffff9f2),
+    Color(0xff5b3828),
+    Color(0xfffff9f2),
+    Color(0xff5b3828),
+    Color(0x295c301f),
   ),
   'ocean': _Palette(
     'オーシャン',
-    Color(0xffe7f1f3),
-    Color(0xff20343b),
-    Color(0xfff8fcfc),
-    Color(0xff2784a0),
-    Color(0xffc5dce1),
+    Color(0xfff9fdff),
+    Color(0xff15518b),
+    Color(0xfff8fdff),
+    Color(0xff07559d),
+    Color(0x2e3890c9),
   ),
   'forest': _Palette(
     'フォレスト',
-    Color(0xffe8f2eb),
-    Color(0xff18392a),
-    Color(0xfffbfdfb),
-    Color(0xff168243),
-    Color(0xffc9dfd0),
+    Color(0xfffbfffc),
+    Color(0xff14532d),
+    Color(0xfff0fdf4),
+    Color(0xff15803d),
+    Color(0x26226534),
   ),
 };
 
@@ -97,19 +99,73 @@ class _OisoAppState extends State<OisoApp> {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
+        fontFamily: 'Inter',
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: c.accent,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            minimumSize: const Size(0, 42),
+            textStyle: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: c.accent,
+            side: BorderSide(color: c.line),
+            minimumSize: const Size(0, 38),
+            textStyle: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          isDense: true,
+          filled: true,
+          fillColor: c.bg,
+          contentPadding: const EdgeInsets.all(12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(3),
+            borderSide: BorderSide(color: c.line),
+          ),
+        ),
+
         scaffoldBackgroundColor: c.bg,
         colorScheme: ColorScheme.fromSeed(
           seedColor: c.accent,
           brightness: theme == 'dark' ? Brightness.dark : Brightness.light,
           surface: c.surface,
+          primary: c.accent,
+          onSurface: c.fg,
         ),
-        textTheme: const TextTheme(
-          bodyMedium: TextStyle(fontWeight: FontWeight.w400, letterSpacing: .1),
+        textTheme: TextTheme(
+          bodyMedium: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: c.fg,
+          ),
+          bodyLarge: TextStyle(fontSize: 14, color: c.fg),
           titleLarge: TextStyle(fontWeight: FontWeight.w500),
         ),
         appBarTheme: AppBarTheme(
-          backgroundColor: c.bg,
-          foregroundColor: c.fg,
+          backgroundColor: c.header,
+          foregroundColor: c.headerText,
+          surfaceTintColor: Colors.transparent,
+          systemOverlayStyle: c.name == 'ブラウン' || theme == 'dark'
+              ? SystemUiOverlayStyle.light
+              : SystemUiOverlayStyle.dark,
           elevation: 0,
         ),
         navigationBarTheme: NavigationBarThemeData(
@@ -232,6 +288,7 @@ class _ShellState extends State<_Shell> {
           await _persistRecords();
         },
         onRelay: _relay,
+        onAdd: () => _showAddRecord(),
       ),
       _ReviewPage(
         reviews: reviews,
@@ -242,93 +299,15 @@ class _ShellState extends State<_Shell> {
       ),
     ];
     return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 16,
-        title: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: widget.palette.accent,
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: const Text(
-                'お',
-                style: TextStyle(color: Colors.white, fontSize: 20),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '新宿ビストロ・エッジ',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                  Text(
-                    '端末内に保存中',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: widget.palette.accent,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              tooltip: '使い方',
-              onPressed: _help,
-              icon: const Icon(Icons.help_outline),
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'カラーテーマ',
-              icon: const Icon(Icons.palette_outlined),
-              onSelected: (v) {
-                if (v == 'settings') {
-                  _openThemeSettings();
-                } else {
-                  widget.onTheme(v);
-                }
-              },
-              itemBuilder: (_) => [
-                ..._themes.entries.map(
-                  (e) => PopupMenuItem<String>(
-                    value: e.key,
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 10,
-                          backgroundColor: e.value.accent,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(e.value.name),
-                        const Spacer(),
-                        if (e.key == widget.theme)
-                          const Icon(Icons.check, size: 18),
-                      ],
-                    ),
-                  ),
-                ),
-                const PopupMenuDivider(),
-                const PopupMenuItem<String>(
-                  value: 'settings',
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.tune),
-                    title: Text('詳細設定'),
-                  ),
-                ),
-              ],
-            ),
-            IconButton(
-              tooltip: '更新',
-              onPressed: _load,
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(76),
+        child: _WebHeader(
+          theme: widget.theme,
+          palette: widget.palette,
+          onTheme: widget.onTheme,
+          onSettings: _openThemeSettings,
+          onHelp: _help,
+          onRefresh: _load,
         ),
       ),
       body: Stack(
@@ -352,35 +331,11 @@ class _ShellState extends State<_Shell> {
           IndexedStack(index: tab, children: pages),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: tab > 2 ? 2 : tab,
-        onDestinationSelected: (v) => setState(() => tab = v),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.grid_view_outlined),
-            selectedIcon: Icon(Icons.grid_view),
-            label: '経費帳',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.photo_camera_outlined),
-            selectedIcon: Icon(Icons.photo_camera),
-            label: 'レシート保管',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: '履歴一覧',
-          ),
-        ],
+      bottomNavigationBar: _WebNav(
+        palette: widget.palette,
+        index: tab > 2 ? 2 : tab,
+        onTap: (v) => setState(() => tab = v),
       ),
-      floatingActionButton: tab == 0
-          ? FloatingActionButton(
-              onPressed: () => _showAddRecord(),
-              backgroundColor: widget.palette.accent,
-              foregroundColor: Colors.white,
-              child: const Icon(Icons.add),
-            )
-          : null,
     );
   }
 
@@ -620,303 +575,6 @@ class _ShellState extends State<_Shell> {
   }
 }
 
-class _HomePage extends StatelessWidget {
-  const _HomePage({
-    required this.records,
-    required this.photos,
-    required this.palette,
-    required this.settings,
-    required this.goReceipts,
-    required this.goHistory,
-  });
-  final List<Map<String, dynamic>> records;
-  final List<File> photos;
-  final _Palette palette;
-  final Map<String, dynamic> settings;
-  final VoidCallback goReceipts, goHistory;
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final monthRecords = records.where((r) {
-      final date = DateTime.tryParse('${r['timestamp'] ?? ''}');
-      return date != null && date.year == now.year && date.month == now.month;
-    }).toList();
-    final total = monthRecords.fold<int>(
-      0,
-      (sum, r) => sum + _num(r['amount']),
-    );
-    final pending = monthRecords.where((r) => !_confirmed(r)).length;
-    final confirmed = monthRecords.length - pending;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 28),
-      children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text(
-                '日々の経費帳',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w500),
-              ),
-            ),
-            Text(
-              DateTime.now().toLocal().toString().substring(0, 10),
-              style: const TextStyle(fontSize: 12),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        _PhotoSurface(
-          target: 'total',
-          settings: settings,
-          palette: palette,
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: palette.accent.withValues(alpha: .80),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '記録した経費の合計',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-                const Divider(color: Colors.white38, height: 24),
-                Text(
-                  '¥${_money(total)}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 38,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '● 未確定  $pending 件',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '● 確定済み  $confirmed 件',
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: _StatCard(
-                title: '未確定の記録',
-                count: pending,
-                palette: palette,
-                target: 'pending',
-                settings: settings,
-              ),
-            ),
-            Expanded(
-              child: _StatCard(
-                title: '確定済み経費',
-                count: confirmed,
-                palette: palette,
-                target: 'confirmed',
-                settings: settings,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        _Surface(
-          target: 'recent',
-          settings: settings,
-          palette: palette,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _SectionTitle('最近の記録'),
-              if (records.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 28),
-                  child: Center(child: Text('経費データがありません')),
-                )
-              else
-                ...records
-                    .take(4)
-                    .map((r) => _RecordTile(record: r, palette: palette)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _Surface(
-          target: 'backup',
-          settings: settings,
-          palette: palette,
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '端末バックアップ',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${photos.length}枚のレシート画像を保存中',
-                      style: TextStyle(
-                        color: palette.fg.withValues(alpha: .65),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                onPressed: () => _backup(context),
-                icon: Icon(Icons.download_outlined, color: palette.accent),
-              ),
-              IconButton(
-                onPressed: () => _restore(context),
-                icon: Icon(Icons.upload_outlined, color: palette.accent),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: goReceipts,
-          icon: const Icon(Icons.add_a_photo_outlined),
-          label: const Text('レシートを保管する'),
-        ),
-        OutlinedButton.icon(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => _ReviewPage(
-                reviews: LedgerStore.instance.reviews(),
-                onChange: (r) => LedgerStore.instance.saveReviews(r),
-              ),
-            ),
-          ),
-          icon: const Icon(Icons.fact_check_outlined),
-          label: const Text('解析結果の確認'),
-        ),
-        TextButton(onPressed: goHistory, child: const Text('履歴一覧を見る')),
-      ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.title,
-    required this.count,
-    required this.palette,
-    required this.target,
-    required this.settings,
-  });
-  final String title;
-  final int count;
-  final _Palette palette;
-  final String target;
-  final Map<String, dynamic> settings;
-  @override
-  Widget build(BuildContext context) => _PhotoSurface(
-    target: target,
-    settings: settings,
-    palette: palette,
-    child: Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: palette.surface.withValues(alpha: .86),
-        border: Border.all(color: palette.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontSize: 12)),
-          Text('$count 件', style: const TextStyle(fontSize: 22)),
-          const Text('¥0', style: TextStyle(fontSize: 11)),
-        ],
-      ),
-    ),
-  );
-}
-
-class _ReceiptsPage extends StatelessWidget {
-  const _ReceiptsPage({
-    required this.photos,
-    required this.onAdd,
-    required this.onDelete,
-  });
-  final List<File> photos;
-  final Future<void> Function(ImageSource) onAdd;
-  final Future<void> Function(File) onDelete;
-  @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(18),
-    children: [
-      const _SectionTitle('レシートを端末に保存'),
-      const SizedBox(height: 12),
-      const Text('ここでは文字の読み取りやAI解析はしません。画像はこの端末に保存し、あとでPCのOISO2へ送れます。'),
-      const SizedBox(height: 14),
-      Row(
-        children: [
-          Expanded(
-            child: FilledButton.icon(
-              onPressed: () => onAdd(ImageSource.camera),
-              icon: const Icon(Icons.camera_alt_outlined),
-              label: const Text('撮影する'),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => onAdd(ImageSource.gallery),
-              icon: const Icon(Icons.photo_library_outlined),
-              label: const Text('写真を選ぶ'),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 22),
-      _SectionTitle('保存した写真  ${photos.length}枚'),
-      const SizedBox(height: 10),
-      if (photos.isEmpty)
-        const Center(
-          child: Padding(
-            padding: EdgeInsets.all(36),
-            child: Text('保存した写真はありません'),
-          ),
-        )
-      else
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: photos.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-          ),
-          itemBuilder: (ctx, i) =>
-              _PhotoThumb(file: photos[i], onDelete: () => onDelete(photos[i])),
-        ),
-    ],
-  );
-}
-
 class _PhotoThumb extends StatelessWidget {
   const _PhotoThumb({required this.file, required this.onDelete});
   final File file;
@@ -972,101 +630,13 @@ class _HistoryPage extends StatefulWidget {
     required this.records,
     required this.onChange,
     required this.onRelay,
+    required this.onAdd,
   });
   final List<Map<String, dynamic>> records;
   final ValueChanged<List<Map<String, dynamic>>> onChange;
-  final VoidCallback onRelay;
+  final VoidCallback onRelay, onAdd;
   @override
   State<_HistoryPage> createState() => _HistoryPageState();
-}
-
-class _HistoryPageState extends State<_HistoryPage> {
-  String filter = 'すべて';
-  @override
-  Widget build(BuildContext context) {
-    final filtered = widget.records
-        .where(
-          (r) =>
-              filter == 'すべて' ||
-              (filter == '確定済み' ? _confirmed(r) : !_confirmed(r)),
-        )
-        .toList();
-    return ListView(
-      padding: const EdgeInsets.all(18),
-      children: [
-        const _SectionTitle('記録データ履歴'),
-        const SizedBox(height: 12),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'すべて', label: Text('すべて')),
-            ButtonSegment(value: '未確定', label: Text('未確定')),
-            ButtonSegment(value: '確定済み', label: Text('確定済み')),
-          ],
-          selected: {filter},
-          onSelectionChanged: (v) => setState(() => filter = v.first),
-        ),
-        const SizedBox(height: 14),
-        if (filtered.isEmpty)
-          const Padding(
-            padding: EdgeInsets.all(30),
-            child: Center(child: Text('該当する経費データがありません')),
-          )
-        else
-          ...filtered.map(
-            (r) => _RecordCard(
-              record: r,
-              onEdit: () async {
-                final result = await _editRecord(context, r);
-                if (result != null) {
-                  final all = [...widget.records];
-                  final i = all.indexWhere((x) => x['id'] == r['id']);
-                  if (i >= 0) all[i] = result;
-                  widget.onChange(all);
-                }
-              },
-              onConfirm: () {
-                final all = [...widget.records];
-                final i = all.indexWhere((x) => x['id'] == r['id']);
-                if (i >= 0) all[i]['status'] = 'confirmed';
-                widget.onChange(all);
-              },
-            ),
-          ),
-        const SizedBox(height: 16),
-        _Surface(
-          target: 'relay',
-          settings: LedgerStore.instance.settings(),
-          palette: _themes[LedgerStore.instance.theme]!,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'PCへ送信（Relay）',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'OISO2 BridgeのQRを読み込み、保存済みレシートをPCへ送信します。',
-                style: TextStyle(fontSize: 12),
-              ),
-              const SizedBox(height: 10),
-              FilledButton.icon(
-                onPressed: widget.onRelay,
-                icon: const Icon(Icons.qr_code_2),
-                label: const Text('Bridgeへ接続して送信'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: () => _backup(context),
-          icon: const Icon(Icons.save_alt),
-          label: const Text('端末バックアップを保存'),
-        ),
-      ],
-    );
-  }
 }
 
 class _RecordCard extends StatelessWidget {
@@ -1168,156 +738,447 @@ class _ThemeSettingsPageState extends State<_ThemeSettingsPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('詳細設定')),
-    body: ListView(
-      padding: const EdgeInsets.all(18),
-      children: [
-        const _SectionTitle('カラーテーマ'),
-        ..._themes.entries.map(
-          (e) => RadioListTile<String>(
-            contentPadding: EdgeInsets.zero,
-            value: e.key,
-            groupValue: theme,
-            onChanged: (v) {
-              if (v != null) {
-                setState(() => theme = v);
-                widget.onTheme(v);
-              }
-            },
-            title: Row(
+  Widget build(BuildContext context) {
+    final c = _themes[theme] ?? _themes['light']!;
+    Future<void> choose(String value) async {
+      setState(() => target = value);
+      final action = await showModalBottomSheet<String>(
+        context: context,
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(LucideIcons.images),
+                title: const Text('端末の写真を選ぶ'),
+                onTap: () => Navigator.pop(ctx, 'gallery'),
+              ),
+              ListTile(
+                leading: const Icon(LucideIcons.camera),
+                title: const Text('撮影する'),
+                onTap: () => Navigator.pop(ctx, 'camera'),
+              ),
+              ListTile(
+                leading: const Icon(LucideIcons.folder),
+                title: const Text('保管済みレシートから選ぶ'),
+                onTap: () => Navigator.pop(ctx, 'saved'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (action == 'gallery') await _choosePhoto(ImageSource.gallery);
+      if (action == 'camera') await _choosePhoto(ImageSource.camera);
+      if (action == 'saved') await _selectExisting();
+    }
+
+    Widget photoCard(String key, String title, String text, IconData icon) {
+      final photoPath = key == 'background'
+          ? settings['backgroundPhoto']
+          : (settings['widgetPhotos'] as Map? ?? {})[key];
+      final has = key == 'background'
+          ? settings['backgroundPhoto'] != null
+          : (settings['widgetPhotos'] as Map? ?? {})[key] != null;
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: c.surface,
+          border: Border.all(color: c.line),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (photoPath is String && File(photoPath).existsSync()) ...[
+              SizedBox(
+                width: double.infinity,
+                height: 140,
+                child: Image.file(File(photoPath), fit: BoxFit.cover),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '設定中の写真',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Row(
               children: [
-                CircleAvatar(radius: 10, backgroundColor: e.value.accent),
-                const SizedBox(width: 10),
-                Text(e.value.name),
+                Container(
+                  width: 38,
+                  height: 38,
+                  color: c.accent.withValues(alpha: .1),
+                  child: Icon(icon, size: 19, color: c.accent),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        text,
+                        style: TextStyle(
+                          fontSize: 10,
+                          height: 1.5,
+                          color: c.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (has)
+                  OutlinedButton.icon(
+                    icon: const Icon(LucideIcons.imageOff, size: 18),
+                    label: Text(key == 'background' ? '背景写真を解除' : 'カード写真を解除'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 44),
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        if (key == 'background') {
+                          settings.remove('backgroundPhoto');
+                        } else {
+                          final photos = Map<String, dynamic>.from(
+                            settings['widgetPhotos'] ?? {},
+                          );
+                          photos.remove(key);
+                          settings['widgetPhotos'] = photos;
+                        }
+                      });
+                      widget.onSettings(settings);
+                    },
+                  ),
+                OutlinedButton(
+                  onPressed: () => choose(key),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    minimumSize: const Size(0, 44),
+                  ),
+                  child: Text(has ? '写真を変更' : '写真を選ぶ'),
+                ),
+              ],
+            ),
+            if (has) ...[
+              const SizedBox(height: 6),
+              Text(
+                '解除しても元の写真は削除されません。',
+                style: TextStyle(fontSize: 11, color: c.muted),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    Widget dimControl(String key, String title) => SwitchListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+      ),
+      subtitle: Text(
+        '画面の文字やカードを読みやすくします。',
+        style: TextStyle(fontSize: 9, color: c.muted),
+      ),
+      value: key == 'background'
+          ? settings['backgroundDim'] == true
+          : (settings['widgetDim'] as Map? ?? {})[key] == true,
+      onChanged: (v) {
+        setState(() {
+          if (key == 'background') {
+            settings['backgroundDim'] = v;
+          } else {
+            final values = Map<String, dynamic>.from(
+              settings['widgetDim'] ?? {},
+            );
+            values[key] = v;
+            settings['widgetDim'] = values;
+          }
+        });
+        widget.onSettings(settings);
+      },
+    );
+    final selected = target == 'background' ? 'total' : target;
+    return Scaffold(
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(76),
+        child: _WebHeader(
+          theme: theme,
+          palette: c,
+          onTheme: (v) {
+            setState(() => theme = v);
+            widget.onTheme(v);
+          },
+          onSettings: () {},
+          onHelp: () => showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('写真の設定'),
+              content: const Text(
+                '背景やカードに写真を設定できます。写真を選んだ後に範囲を調整し、見た目を名前付きで保存できます。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('閉じる'),
+                ),
               ],
             ),
           ),
+          onRefresh: () =>
+              setState(() => settings = LedgerStore.instance.settings()),
         ),
-        const SizedBox(height: 12),
-        const _SectionTitle('背景・ウィジェットの写真'),
-        const Text('対象を選び、端末内の写真を設定できます。写真は枠に合わせて表示されます。'),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: target,
-          decoration: const InputDecoration(
-            labelText: '写真を設定する場所',
-            border: OutlineInputBorder(),
-          ),
-          items: const [
-            DropdownMenuItem(value: 'background', child: Text('画面背景')),
-            DropdownMenuItem(value: 'total', child: Text('経費合計')),
-            DropdownMenuItem(value: 'pending', child: Text('未確定の記録')),
-            DropdownMenuItem(value: 'confirmed', child: Text('確定済み経費')),
-            DropdownMenuItem(value: 'recent', child: Text('最近の記録')),
-            DropdownMenuItem(value: 'backup', child: Text('端末バックアップ')),
-            DropdownMenuItem(value: 'relay', child: Text('PCへ送信（Relay）')),
-          ],
-          onChanged: (v) => setState(() => target = v ?? 'background'),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _selectExisting,
-                icon: const Icon(Icons.photo_library_outlined),
-                label: const Text('保存済み写真から選ぶ'),
+      ),
+      body: Stack(
+        children: [
+          if (settings['backgroundPhoto'] is String &&
+              File(settings['backgroundPhoto']).existsSync()) ...[
+            Positioned.fill(
+              child: Image.file(
+                File(settings['backgroundPhoto']),
+                fit: BoxFit.cover,
               ),
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              onPressed: () => _choosePhoto(ImageSource.camera),
-              icon: const Icon(Icons.camera_alt_outlined),
-              tooltip: '撮影して設定',
-            ),
+            if (settings['backgroundDim'] == true)
+              Positioned.fill(
+                child: ColoredBox(color: c.bg.withValues(alpha: .58)),
+              ),
           ],
-        ),
-        if (target == 'background'
-            ? settings['backgroundPhoto'] != null
-            : (settings['widgetPhotos'] as Map? ?? {})[target] != null)
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('背景写真を薄く表示'),
-            value: target == 'background'
-                ? (settings['backgroundDim'] as bool? ?? false)
-                : (((settings['widgetDim'] as Map? ?? {})[target]) as bool? ??
-                      false),
-            onChanged: (v) {
-              setState(() {
-                if (target == 'background')
-                  settings['backgroundDim'] = v;
-                else {
-                  final d = Map<String, dynamic>.from(
-                    settings['widgetDim'] ?? {},
-                  );
-                  d[target] = v;
-                  settings['widgetDim'] = d;
-                }
-              });
-              widget.onSettings(settings);
-            },
-          ),
-        const Divider(height: 28),
-        const _SectionTitle('テーマ設定を保存'),
-        TextField(
-          controller: name,
-          decoration: const InputDecoration(
-            labelText: '設定名',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 8),
-        FilledButton(
-          onPressed: () async {
-            if (name.text.trim().isEmpty) return;
-            final list = LedgerStore.instance.presets()
-              ..add({
-                'name': name.text.trim(),
-                'theme': theme,
-                'settings': settings,
-                'createdAt': DateTime.now().toIso8601String(),
-              });
-            await LedgerStore.instance.savePresets(list);
-            setState(() {});
-            name.clear();
-          },
-          child: const Text('現在の設定を保存'),
-        ),
-        ...LedgerStore.instance.presets().map(
-          (preset) => ListTile(
-            title: Text('${preset['name']}'),
-            subtitle: Text(_themes[preset['theme']]?.name ?? 'ライト'),
-            trailing: Wrap(
-              children: [
-                IconButton(
-                  onPressed: () {
-                    setState(() {
-                      theme = preset['theme'] ?? 'light';
-                      settings = Map<String, dynamic>.from(
-                        preset['settings'] ?? {},
-                      );
-                    });
-                    widget.onTheme(theme);
-                    widget.onSettings(settings);
-                  },
-                  icon: const Icon(Icons.check),
+          ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(LucideIcons.arrowLeft, size: 16),
+                  label: const Text('テーマに戻る', style: TextStyle(fontSize: 12)),
                 ),
-                IconButton(
-                  onPressed: () async {
-                    final list = LedgerStore.instance.presets()..remove(preset);
-                    await LedgerStore.instance.savePresets(list);
-                    setState(() {});
-                  },
-                  icon: const Icon(Icons.delete_outline),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'THEME CUSTOMIZATION',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                  color: c.accent,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 3),
+              Text('詳細設定', style: _webHeading(20)),
+              const SizedBox(height: 5),
+              Text(
+                '背景やウィジェットに好きな写真を設定できます。',
+                style: TextStyle(fontSize: 12, color: c.muted),
+              ),
+              const SizedBox(height: 22),
+              _Surface(
+                target: 'presets',
+                settings: const {},
+                palette: c,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            '見た目を保存',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        Icon(LucideIcons.layers2, size: 19, color: c.accent),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '背景やウィジェットの設定をまとめて保存できます。',
+                      style: TextStyle(fontSize: 10, color: c.muted),
+                    ),
+                    const SizedBox(height: 13),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: name,
+                            maxLength: 24,
+                            style: const TextStyle(fontSize: 11),
+                            decoration: const InputDecoration(
+                              hintText: '例：春のテーマ',
+                              counterText: '',
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 7),
+                        FilledButton.icon(
+                          icon: const Icon(LucideIcons.bookmarkPlus, size: 14),
+                          label: const Text('保存'),
+                          onPressed: () async {
+                            if (name.text.trim().isEmpty) return;
+                            final list = LedgerStore.instance.presets()
+                              ..add({
+                                'name': name.text.trim(),
+                                'theme': theme,
+                                'settings': jsonDecode(jsonEncode(settings)),
+                                'createdAt': DateTime.now().toIso8601String(),
+                              });
+                            await LedgerStore.instance.savePresets(list);
+                            if (mounted) setState(() => name.clear());
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 9),
+                    if (LedgerStore.instance.presets().isEmpty)
+                      Center(
+                        child: Text(
+                          '保存した設定はありません。',
+                          style: TextStyle(fontSize: 9, color: c.muted),
+                        ),
+                      )
+                    else
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 108),
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: LedgerStore.instance
+                              .presets()
+                              .asMap()
+                              .entries
+                              .map((entry) {
+                                final preset = entry.value;
+                                return Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${preset['name']}',
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          theme = preset['theme'] ?? 'light';
+                                          settings = Map<String, dynamic>.from(
+                                            jsonDecode(
+                                              jsonEncode(
+                                                preset['settings'] ?? {},
+                                              ),
+                                            ),
+                                          );
+                                        });
+                                        widget.onTheme(theme);
+                                        widget.onSettings(settings);
+                                      },
+                                      child: const Text(
+                                        '適用',
+                                        style: TextStyle(fontSize: 9),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: '設定を削除',
+                                      icon: const Icon(
+                                        LucideIcons.trash2,
+                                        size: 14,
+                                      ),
+                                      onPressed: () async {
+                                        final list =
+                                            LedgerStore.instance.presets()
+                                              ..removeAt(entry.key);
+                                        await LedgerStore.instance.savePresets(
+                                          list,
+                                        );
+                                        if (mounted) setState(() {});
+                                      },
+                                    ),
+                                  ],
+                                );
+                              })
+                              .toList(),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              photoCard(
+                'background',
+                '背景',
+                'アプリの背景に写真を設定します。',
+                LucideIcons.image,
+              ),
+              dimControl('background', '背景写真を薄く表示'),
+              const SizedBox(height: 16),
+              const Text(
+                '写真を設定するウィジェット',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 7),
+              DropdownButtonFormField<String>(
+                initialValue: selected,
+                style: TextStyle(fontSize: 11, color: c.fg),
+                items: const [
+                  DropdownMenuItem(value: 'total', child: Text('今月の経費合計')),
+                  DropdownMenuItem(value: 'pending', child: Text('未確定ファクト')),
+                  DropdownMenuItem(value: 'confirmed', child: Text('確定済み経費')),
+                  DropdownMenuItem(
+                    value: 'categories',
+                    child: Text('経費カテゴリ内訳'),
+                  ),
+                  DropdownMenuItem(value: 'recent', child: Text('要確認の現場ファクト')),
+                  DropdownMenuItem(value: 'backup', child: Text('端末バックアップ')),
+                  DropdownMenuItem(value: 'relay', child: Text('PCへ送信（Relay）')),
+                ],
+                onChanged: (v) => setState(() => target = v ?? 'total'),
+              ),
+              const SizedBox(height: 16),
+              photoCard(
+                selected,
+                'ウィジェット',
+                '選択したカードに写真を設定します。',
+                LucideIcons.layoutDashboard,
+              ),
+              dimControl(selected, 'ウィジェット写真を薄く表示'),
+            ],
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    super.dispose();
+  }
+
   Future<void> _choosePhoto(ImageSource source) async {
     final x = await ImagePicker().pickImage(source: source, imageQuality: 92);
     if (x == null) return;
@@ -1863,7 +1724,7 @@ class _Surface extends StatelessWidget {
         border: Border.all(color: palette.line),
         borderRadius: BorderRadius.circular(4),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       child: child,
     );
   }
@@ -1886,7 +1747,7 @@ class _PhotoSurface extends StatelessWidget {
     final dim = (settings['widgetDim'] as Map? ?? {})[target] == true;
     final hasImage = path is String && File(path).existsSync();
     return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.zero,
       child: Container(
         decoration: BoxDecoration(
           color: palette.surface,
@@ -1907,26 +1768,6 @@ class _PhotoSurface extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-  final String text;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          text,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
-        ),
-        const SizedBox(height: 8),
-        const Divider(height: 1),
-      ],
-    ),
-  );
 }
 
 Future<Map<String, dynamic>?> _editRecord(

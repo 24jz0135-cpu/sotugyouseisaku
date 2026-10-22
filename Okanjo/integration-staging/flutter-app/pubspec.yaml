@@ -14,12 +14,12 @@ dependencies:
   http: ^1.6.0
   image: ^4.12.0
   image_picker: ^1.2.4
+  lucide_icons_flutter: ^4.0.0
   mobile_scanner: ^7.4.2
   path: ^1.9.1
   path_provider: ^2.1.6
   share_plus: ^13.3.1
   shared_preferences: ^2.5.6
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -27,3 +27,10 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter.ttf
+    - family: Outfit
+      fonts:
+        - asset: assets/fonts/Outfit.ttf
