@@ -1,3 +1,6 @@
+import { saveLocalImage } from './upload.mjs';
+import { fileURLToPath } from 'node:url';
+const appDirectory = fileURLToPath(new URL('../', import.meta.url));
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
 import { createServer } from 'node:http';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
@@ -47,15 +50,24 @@ async function saveAttachment(attachment) {
   return { id, fileName: sourceName };
 }
 async function receiptFiles(ids) { const rows = await listInbox(); const byId = new Map(rows.map(row => [row.id, row])); return ids.map(id => byId.get(id)).filter(Boolean).map(row => ({ ...row, path: join(inbox, `${row.id}__${row.fileName}`) })); }
-function run(command, args) { return new Promise((resolveRun, reject) => { const child = spawn(command, args, { cwd: root, shell: false, windowsHide: true }); let stderr = ''; child.stderr.on('data', data => { stderr += data; }); child.on('error', reject); child.on('close', code => code === 0 ? resolveRun() : reject(new Error(stderr || `${command} exited with ${code}`))); }); }
+function run(command, args) { return new Promise((resolveRun, reject) => {
+  const child = spawn(command, args, { cwd: root, shell: false, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+  let stderr = '';
+  const timer = setTimeout(() => { child.kill(); reject(new Error('解析が5分以内に完了しませんでした。Codexのログインと利用枠を確認してください。')); }, 300_000);
+  child.stderr.on('data', data => { stderr = (stderr + data).slice(-8000); });
+  child.on('error', error => { clearTimeout(timer); reject(error); });
+  child.on('close', code => { clearTimeout(timer); code === 0 ? resolveRun() : reject(new Error(stderr || `${command} exited with ${code}`)); });
+}); }
 async function analyze(ids) {
   const files = await receiptFiles(ids); if (!files.length) throw new Error('解析する受信画像を選択してください');
-  const jobId = `job-${Date.now()}`; let records;
+  const jobId = `job-${Date.now()}-${randomUUID().slice(0, 8)}`; let records;
   if (config.analyzer === 'codex') {
     const outputPath = join(results, `${jobId}.json`); const imagePaths = files.map(file => file.path).join(',');
     const prompt = `画像内の各レシートを解析してください。画像の対応IDは順に ${files.map(file => file.id).join(', ')} です。日付、店名、合計金額、勘定科目候補を抽出し、読めない値は null にしてください。JSONだけを返してください。`;
-    await run(config.codex, ['exec', '--sandbox', 'read-only', '--image', imagePaths, '--output-schema', resolve(process.cwd(), 'schema.json'), '--output-last-message', outputPath, prompt]);
+    await run(config.codex, ['exec', '--sandbox', 'read-only', '--skip-git-repo-check', '--image', imagePaths, '--output-schema', fileURLToPath(new URL('./schema.json', import.meta.url)), '--output-last-message', outputPath, prompt]);
     records = JSON.parse(await readFile(outputPath, 'utf8')).records;
+    const expected = new Set(files.map(file => file.id));
+    if (!Array.isArray(records) || records.length !== expected.size || records.some(record => !record || !expected.delete(record.receiptId) || !['date', 'vendor', 'category'].every(key => record[key] === null || typeof record[key] === 'string') || !['amount', 'confidence'].every(key => record[key] === null || Number.isFinite(record[key])))) throw new Error('解析結果の形式またはレシートIDが一致しません。再解析してください。');
   } else records = files.map(file => ({ receiptId: file.id, date: null, vendor: null, amount: null, category: null, confidence: null }));
   const csv = toCsv(records); const csvPath = join(results, `${jobId}.csv`); await writeFile(csvPath, `\uFEFF${csv}`, 'utf8');
   return { jobId, records, csv, csvPath, mode: config.analyzer };
@@ -112,14 +124,30 @@ async function bootDiscord() {
 function json(response, status, body) { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174' }); response.end(JSON.stringify(body)); }
 function parseBody(request) { return new Promise((resolveBody, reject) => { let text = ''; request.on('data', chunk => { text += chunk; if (text.length > 100000) request.destroy(); }); request.on('end', () => { try { resolveBody(text ? JSON.parse(text) : {}); } catch { reject(new Error('JSON形式が不正です')); } }); request.on('error', reject); }); }
 const server = createServer(async (request, response) => {
-  if (request.method === 'OPTIONS') { response.writeHead(204, { 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174', 'Access-Control-Allow-Methods': 'GET,POST' }); return response.end(); }
+  if(request.headers.origin && !/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(request.headers.origin)) return json(response,403,{error:'PC上のOISO2から操作してください'});
+  if (request.method === 'OPTIONS') { response.writeHead(204, { 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' }); return response.end(); }
   try { const url = new URL(request.url, `http://${request.headers.host}`);
+    if (request.method === 'GET' && url.pathname === '/mobile-review-data.js') {
+      response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+      return response.end(await readFile(join(appDirectory, '../../../スマートフォン/OISO/instant-ledger/frontend-app/review-data.js')));
+    }
+    if (request.method === 'GET' && url.pathname === '/ledger.js') {
+      response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+      return response.end(await readFile(join(appDirectory, 'ledger.js')));
+    }
+    const assets = { '/': ['index.html', 'text/html'], '/workspace.js': ['workspace.js', 'text/javascript'], '/theme.js': ['theme.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'], '/tax.js': ['tax.js', 'text/javascript'], '/tax-ui.js': ['tax-ui.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
+    if (request.method === 'GET' && assets[url.pathname]) {
+      const [name, type] = assets[url.pathname];
+      response.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` });
+      return response.end(await readFile(join(appDirectory, name)));
+    }
+    if (request.method === 'POST' && url.pathname === '/api/inbox') return json(response,201,await saveLocalImage(request,inbox));
     if (request.method === 'GET' && url.pathname === '/api/health') return json(response, 200, { ok: true, discord: Boolean(discordChannel), analyzer: config.analyzer, autoAnalyze: config.autoAnalyze });
     if (request.method === 'GET' && url.pathname === '/api/jobs') return json(response, 200, { jobs: [...jobs.values()].slice(-20).reverse() });
     if (request.method === 'POST' && url.pathname === '/api/mobile-sessions') return json(response, 200, await createMobileSession());
     if (request.method === 'GET' && url.pathname === '/api/inbox') return json(response, 200, { receipts: await listInbox() });
     if (request.method === 'GET' && url.pathname.startsWith('/api/files/')) { const file = basename(decodeURIComponent(url.pathname.slice('/api/files/'.length))); const data = await readFile(join(inbox, file)); response.writeHead(200, { 'Content-Type': mimeFor(file), 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174' }); return response.end(data); }
-    if (request.method === 'POST' && url.pathname === '/api/analyze') { const body = await parseBody(request); const result = await analyze(Array.isArray(body.ids) ? body.ids : []); await sendResultToDiscord(result); return json(response, 200, { jobId: result.jobId, records: result.records, csv: result.csv, mode: result.mode, sentToDiscord: Boolean(discordChannel) }); }
+    if (request.method === 'POST' && url.pathname === '/api/analyze') { const body = await parseBody(request); const result = await analyze(Array.isArray(body.ids) ? body.ids : []); let deliveryError; try { await sendResultToDiscord(result); } catch(error) { deliveryError=error.message; } return json(response, 200, { jobId: result.jobId, records: result.records, csv: result.csv, mode: result.mode, sentToDiscord: Boolean(discordChannel)&&!deliveryError, deliveryError }); }
     return json(response, 404, { error: 'not found' });
   } catch (error) { return json(response, 400, { error: error.message }); }
 });

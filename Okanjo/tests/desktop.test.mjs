@@ -38,7 +38,7 @@ test('local analysis resumes after partial upload and prevents concurrent submis
     }
     return {records: [], mode: 'mock'};
   };
-  vm.runInContext(`bridgeRequest=request;render=()=>{};renderResults=()=>{};bridge.online=true;
+  vm.runInContext(`bridgeRequest=request;render=()=>{};importLedger=()=>{};bridge.online=true;
     S.r=[{name:'first.png',file:{name:'first.png',size:100}},{name:'second.png',file:{name:'second.png',size:100}},{relayId:'R-EXISTING'}]`, context);
   await vm.runInContext('Promise.all([analyzeWithBridge(),analyzeWithBridge()])', context);
   assert.equal(calls.length, 2);

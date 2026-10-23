@@ -28,6 +28,7 @@ function renderTax() {
 }
 function currentTaxSummary(){return OisoTax.summarize(S.records||[],Number($('tax-year').value),$('tax-form').value);}
 function refreshTaxSummary(){
+  if(typeof saveLedger==='function')saveLedger();
   const out=$('tax-summary');out.replaceChildren();$('tax-export').disabled=true;$('tax-details').disabled=true;$('tax-backup').disabled=!(S.records||[]).length;
   try{
     const summary=currentTaxSummary();

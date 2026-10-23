@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFile} from 'node:fs/promises';
+const base=new URL('../デスクトップ/OISO/oiso2/',import.meta.url);
+test('ledger round trip preserves edits and duplicate import protects reviewed records',async()=>{
+ const context=vm.createContext({});vm.runInContext(await readFile(new URL('ledger.js',base),'utf8'),context);
+ const ledger=context.OisoLedger,storage=new Map();
+ const adapter={setItem:(k,v)=>storage.set(k,v),getItem:k=>storage.get(k)};
+ const records=[{receiptId:'R-1',vendor:'編集済み',amount:1200,taxConfirmed:true}];
+ ledger.save(adapter,{records,year:2026,form:'blue'});
+ const loaded=ledger.load(adapter);
+ const merged=ledger.merge(loaded.records,[{receiptId:'R-1',vendor:'再解析',amount:900}]);
+ assert.equal(merged.records[0].vendor,'編集済み');assert.equal(merged.records[0].taxConfirmed,true);
+ assert.equal(merged.skipped,1);assert.equal(loaded.year,2026);
+ assert.throws(()=>ledger.merge(loaded.records,[{receiptId:'X',amount:'oops'}]));
+ assert.equal(ledger.load(adapter).records[0].amount,1200);
+});
+test('image workspace restores blobs and IDs; corrupt restoration does not overwrite saved data',async()=>{
+ const source=await readFile(new URL('workspace.js',base),'utf8');
+ const nodes=new Map();let savedWrites=0;
+ const context=vm.createContext({S:{r:[]},input:{},drop:{style:{}},$:id=>{if(!nodes.has(id))nodes.set(id,{});return nodes.get(id)},load:async file=>({file}),render(){},checkBridge:async()=>{}});
+ vm.runInContext(source,context);
+ context.stored=[{file:{name:'receipt.png'},name:'receipt.png',id:'R-001',relayId:'L-1'}];
+ context.write=()=>savedWrites++;
+ vm.runInContext("workspaceTransaction=async(mode,value)=>mode==='readonly'?stored:write(value)",context);
+ await vm.runInContext('initWorkspace()',context);
+ assert.equal(context.S.r[0].relayId,'L-1');assert.equal(context.input.disabled,false);
+ await vm.runInContext('saveWorkspace();workspaceWrites',context);assert.equal(savedWrites,1);
+ vm.runInContext("workspaceReady=false;load=async()=>{throw Error('corrupt')}",context);
+ await vm.runInContext('initWorkspace();',context);
+ await vm.runInContext('saveWorkspace();workspaceWrites',context);assert.equal(savedWrites,1);
+ assert.match(nodes.get('workspace-status').textContent,/停止/);
+});

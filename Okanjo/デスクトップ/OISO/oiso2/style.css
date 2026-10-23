@@ -332,3 +332,14 @@ button.theme-option.active:hover { border-color: transparent; background: #eef1f
   .hero h1 { font-size: 36px; }
   header em { font-size: 10px; }
 }
+
+/* Receipt review and expense allocation */
+.result { grid-template-columns: minmax(90px, .7fr) repeat(4, minmax(100px, 1fr)); align-items: start; }
+.ledger-controls { margin: 20px 0; }
+.tax-record { padding: 16px 0; border-bottom: 1px solid var(--border, #ddd); }
+.tax-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 12px 0; }
+.tax-fields input,.tax-fields select { display:block; width:100%; padding:8px; }
+.tax-record > label { display:block; margin:10px 0; }
+#tax-summary table { width:100%; text-align:left; margin:16px 0; }
+#tax-summary td,#tax-summary th { padding:8px; }
+@media(max-width:640px){ .result,.tax-fields { grid-template-columns:1fr; } }
