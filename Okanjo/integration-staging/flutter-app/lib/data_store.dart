@@ -107,6 +107,7 @@ class LedgerStore {
     for (final file in await photos()) {
       images.add({
         'name': p.basename(file.path),
+        'sourcePath': file.path,
         'bytes': base64Encode(await file.readAsBytes()),
       });
     }
@@ -125,6 +126,7 @@ class LedgerStore {
       'reviews': reviews(),
       'theme': theme,
       'settings': settings(),
+      'presets': presets(),
       'receiptImages': images,
       'themeImages': themeImages,
     });
@@ -139,18 +141,37 @@ class LedgerStore {
     final restoredRecords = List<Map<String, dynamic>>.from(
       (data['records'] as List? ?? []).map((e) => Map<String, dynamic>.from(e)),
     );
-    await saveRecords(restoredRecords);
-    await saveReviews(
-      List<Map<String, dynamic>>.from(
-        (data['reviews'] as List? ?? []).map(
-          (e) => Map<String, dynamic>.from(e),
-        ),
-      ),
+    // Validate the whole backup before changing saved records or images.
+    for (final key in ['reviews', 'presets']) {
+      for (final value in (data[key] as List? ?? [])) {
+        Map<String, dynamic>.from(value);
+      }
+    }
+    if (data['settings'] != null) {
+      final settings = Map<String, dynamic>.from(data['settings']);
+      if (settings['widgetPhotos'] != null) {
+        Map<String, dynamic>.from(settings['widgetPhotos']);
+      }
+    }
+    for (final value in [
+      ...(data['receiptImages'] as List? ?? data['receipts'] as List? ?? []),
+      ...(data['themeImages'] as List? ?? []),
+    ]) {
+      final image = Map<String, dynamic>.from(value);
+      final encoded =
+          image['bytes'] as String? ??
+          _dataUrlPayload(image['dataUrl'] as String?);
+      if (encoded == null) throw const FormatException('画像データがありません');
+      base64Decode(encoded);
+      if (image['name'] != null) image['name'] as String;
+    }
+    final restoredReviews = List<Map<String, dynamic>>.from(
+      (data['reviews'] as List? ?? []).map((e) => Map<String, dynamic>.from(e)),
     );
-    if (data['theme'] is String) await saveTheme(data['theme']);
     final restoredSettings = data['settings'] is Map
         ? Map<String, dynamic>.from(data['settings'])
         : <String, dynamic>{};
+    final themePaths = <String, String>{};
     final images =
         (data['receiptImages'] as List?) ?? (data['receipts'] as List? ?? []);
     for (final imageValue in images) {
@@ -164,6 +185,14 @@ class LedgerStore {
           '${image['id'] ?? DateTime.now().microsecondsSinceEpoch}.jpg';
       final file = File(p.join(_receipts.path, p.basename(name)));
       if (!await file.exists()) await file.writeAsBytes(base64Decode(encoded));
+      for (final record in restoredRecords) {
+        final oldPath = record['image_path'];
+        if (oldPath is String &&
+            (oldPath == image['sourcePath'] ||
+                p.basename(oldPath) == p.basename(name))) {
+          record['image_path'] = file.path;
+        }
+      }
       final receiptId = image['id'];
       if (receiptId != null) {
         for (final record in restoredRecords) {
@@ -185,6 +214,7 @@ class LedgerStore {
       if (!await file.exists()) await file.writeAsBytes(base64Decode(encoded));
       final oldPath = image['sourcePath'];
       if (oldPath is String) {
+        themePaths[oldPath] = file.path;
         if (restoredSettings['backgroundPhoto'] == oldPath)
           restoredSettings['backgroundPhoto'] = file.path;
         final widgetPhotos = Map<String, dynamic>.from(
@@ -196,7 +226,27 @@ class LedgerStore {
         restoredSettings['widgetPhotos'] = widgetPhotos;
       }
     }
-    if (restoredSettings.isNotEmpty) await saveSettings(restoredSettings);
+    await saveSettings(restoredSettings);
+    await saveReviews(restoredReviews);
+    if (data['theme'] is String) await saveTheme(data['theme']);
+    dynamic remap(dynamic value) {
+      if (value is String) return themePaths[value] ?? value;
+      if (value is List) return value.map(remap).toList();
+      if (value is Map) {
+        return value.map((key, item) => MapEntry(key, remap(item)));
+      }
+      return value;
+    }
+
+    if (data['presets'] != null) {
+      await savePresets(
+        List<Map<String, dynamic>>.from(
+          (data['presets'] as List).map(
+            (e) => Map<String, dynamic>.from(remap(e)),
+          ),
+        ),
+      );
+    }
     await saveRecords(restoredRecords);
   }
 

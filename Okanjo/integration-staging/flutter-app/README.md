@@ -15,7 +15,8 @@ flutter run -d <端末ID>
 ショートカットがない場合は、PowerShellで次のように作成します。
 
 ```powershell
-New-Item -ItemType Junction -Path C:\tmp\OISOFlutter -Target 'C:\Users\24jz\Downloads\sotugyouseisaku-main (2)\sotugyouseisaku-main\Okanjo\スマートフォン\OISO\instant-ledger\frontend-app'
+# このREADMEがあるflutter-appフォルダーで実行します。
+New-Item -ItemType Junction -Path C:\tmp\OISOFlutter -Target (Get-Location).Path
 ```
 
 ## 保存先
@@ -31,3 +32,22 @@ New-Item -ItemType Junction -Path C:\tmp\OISOFlutter -Target 'C:\Users\24jz\Down
 - 解析結果の確認：PC側で作成したCSVの読み込み、編集、確定、共有
 
 音声メモの録音画面は含めていません。
+
+## テストと実機確認用APK
+
+Flutter SDKのbinをPATHに追加した環境で、このフォルダーから実行します。
+Android SDKが自動検出されない場合は、`$env:ANDROID_HOME` にSDKのフォルダーを指定してください。
+
+```powershell
+flutter test
+flutter analyze
+flutter build apk --release
+```
+
+APKは `build/app/outputs/flutter-apk/app-release.apk` です。
+現在のreleaseビルドは開発用キーで署名しています。ストア配布用の署名設定は別途必要です。
+USBデバッグを許可した端末を接続し、`adb devices` で `device` と表示されたら
+`adb install -r build/app/outputs/flutter-apk/app-release.apk` で更新できます。
+既存データを守るため、更新前に端末バックアップを保存してください。
+
+検証結果とデモ手順は `../../VERIFICATION.md` を参照してください。

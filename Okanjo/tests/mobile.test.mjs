@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../スマートフォン/OISO/instant-ledger/frontend-app/relay.js', import.meta.url), 'utf8');
 function mobile(receipts, fetch) {
   const nodes = new Map();
-  const element = () => ({ append() {}, after() {}, disabled: false, textContent: '' });
+  const element = () => ({ dataset: {}, append() {}, after() {}, disabled: false, textContent: '' });
   const query = key => { if (!nodes.has(key)) nodes.set(key, element()); return nodes.get(key); };
   const storage = new Map([['oiso-relay-session', JSON.stringify({ format: 'oiso-relay', deviceId: 'test-pc', uploadUrl: 'https://discord.com/api/webhooks/123/test', expiresAt: Date.now() + 60_000, sessionId: 'S-test' })]]);
   const context = { document: { head: element(), createElement: element, querySelector: query, addEventListener: (event, callback) => callback() },
