@@ -4,6 +4,8 @@
 
 実装済み機能と確認状況は [FEATURES.md](FEATURES.md)、検証結果とデモ手順は [VERIFICATION.md](VERIFICATION.md) を参照してください。
 
+PCの解析結果をスマホへ返して手修正する手順は [PHONE-RESULTS.md](PHONE-RESULTS.md) にまとめています。
+
 ## デスクトップ
 - `デスクトップ\OISO\oiso2`: レシートの一括取り込み、分析用画像・manifest作成、AI解析結果の取り込み、およびBridge受信箱からの取り込み。
 - `デスクトップ\OISO\oiso2\bridge`: 利用者PCで動かすDiscord連携Bridge。初回設定と起動手順は同フォルダーの `README.md` を参照してください。

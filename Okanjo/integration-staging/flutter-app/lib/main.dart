@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'data_store.dart';
+import 'result_transfer.dart';
 part 'web_design.dart';
 
 void main() async {
@@ -231,11 +232,6 @@ class _ShellState extends State<_Shell> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _persistReviews() async {
-    await LedgerStore.instance.saveReviews(reviews);
-    if (mounted) setState(() {});
-  }
-
   Future<void> _refreshPhotos() async {
     photos = await LedgerStore.instance.photos();
     if (mounted) setState(() {});
@@ -290,11 +286,11 @@ class _ShellState extends State<_Shell> {
         onRelay: _relay,
         onAdd: () => _showAddRecord(),
       ),
-      _ReviewPage(
+      ReceiptReviewPage(
         reviews: reviews,
         onChange: (r) async {
-          reviews = r;
-          await _persistReviews();
+          await LedgerStore.instance.saveReviews(r);
+          if (mounted) setState(() => reviews = r);
         },
       ),
     ];
@@ -1254,30 +1250,56 @@ class _ThemeSettingsPageState extends State<_ThemeSettingsPage> {
   }
 }
 
-class _ReviewPage extends StatefulWidget {
-  const _ReviewPage({required this.reviews, required this.onChange});
+class ReceiptReviewPage extends StatefulWidget {
+  const ReceiptReviewPage({
+    super.key,
+    required this.reviews,
+    required this.onChange,
+    this.receive = receiveResultCsv,
+  });
   final List<Map<String, dynamic>> reviews;
-  final ValueChanged<List<Map<String, dynamic>>> onChange;
+  final Future<void> Function(List<Map<String, dynamic>>) onChange;
+  final Future<String> Function(String) receive;
   @override
-  State<_ReviewPage> createState() => _ReviewPageState();
+  State<ReceiptReviewPage> createState() => ReceiptReviewPageState();
 }
 
-class _ReviewPageState extends State<_ReviewPage> {
+class ReceiptReviewPageState extends State<ReceiptReviewPage> {
+  bool receiving = false;
+  late List<Map<String, dynamic>> reviewRows;
+  @override
+  void initState() {
+    super.initState();
+    reviewRows = widget.reviews;
+  }
+
+  @override
+  void didUpdateWidget(covariant ReceiptReviewPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.reviews, widget.reviews))
+      reviewRows = widget.reviews;
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('解析結果の確認')),
     body: ListView(
       padding: const EdgeInsets.all(18),
       children: [
-        const Text('PCで解析したレシートCSVを読み込み、商品名・金額・カテゴリを確認して保存します。'),
+        const Text('PCから解析結果を受け取り、店舗名・日付・金額・科目を手で修正できます。同じWi-Fiに接続してください。'),
+        FilledButton.icon(
+          onPressed: receiving ? null : _receiveFromPc,
+          icon: const Icon(Icons.qr_code_scanner),
+          label: Text(receiving ? 'PCから受信中…' : 'PCの結果をQRで受け取る'),
+        ),
         const SizedBox(height: 14),
         FilledButton.icon(
-          onPressed: _importCsv,
+          onPressed: receiving ? null : _importCsv,
           icon: const Icon(Icons.file_open_outlined),
           label: const Text('解析結果CSVを読み込む'),
         ),
         const SizedBox(height: 12),
-        if (widget.reviews.isEmpty)
+        if (reviewRows.isEmpty)
           const Center(
             child: Padding(
               padding: EdgeInsets.all(28),
@@ -1285,7 +1307,7 @@ class _ReviewPageState extends State<_ReviewPage> {
             ),
           )
         else
-          ...widget.reviews.map(
+          ...reviewRows.map(
             (r) => Card(
               child: ListTile(
                 title: Text('${r['vendor'] ?? '店舗未確認'} · ¥${r['amount'] ?? 0}'),
@@ -1317,6 +1339,134 @@ class _ReviewPageState extends State<_ReviewPage> {
     ),
   );
 
+  Future<void> _acceptCsv(String text) async {
+    if (text.length > 2 * 1024 * 1024)
+      throw const FormatException('CSVは2MB以内にしてください');
+    final rows = _parseCsv(text);
+    if (rows.length < 2) throw const FormatException('明細入りのOISO解析CSVを選んでください');
+    final headers = rows.first.map((s) => s.trim()).toList();
+    const required = ['receiptId', 'date', 'vendor', 'amount', 'category'];
+    if (headers.toSet().length != headers.length ||
+        !required.every(headers.contains)) {
+      throw const FormatException(
+        'receiptId・date・vendor・amount・category列が必要です',
+      );
+    }
+    if (rows.length - 1 > 5000)
+      throw const FormatException('一度に読み込める明細は5000件までです');
+    final seen = <String>{};
+    final existing = reviewRows
+        .map((r) => '${r['receiptId'] ?? r['id'] ?? ''}')
+        .toSet();
+    final data = rows
+        .skip(1)
+        .where((r) => r.any((v) => v.trim().isNotEmpty))
+        .map((row) {
+          if (row.length != headers.length)
+            throw const FormatException('CSVの列数が一致しません');
+          final m = <String, dynamic>{};
+          for (var i = 0; i < headers.length && i < row.length; i++) {
+            m[headers[i]] = row[i].trim();
+          }
+          final id = '${m['receiptId'] ?? ''}'.trim();
+          if (id.isEmpty || !seen.add(id))
+            throw const FormatException('receiptIdが空欄または重複しています');
+          if (existing.contains(id)) return null;
+          return <String, dynamic>{
+            'receiptId': id,
+            'date': '${m['date'] ?? ''}',
+            'vendor': m['vendor'] ?? '',
+            'amount': '${m['amount'] ?? ''}'
+                .replaceAll(',', '')
+                .replaceAll('¥', ''),
+            'category': m['category'] ?? '',
+            'confidence': '${m['confidence'] ?? ''}',
+            'confirmed': false,
+          };
+        })
+        .whereType<Map<String, dynamic>>()
+        .toList();
+    if (reviewRows.length + data.length > 5000)
+      throw const FormatException('保存件数の上限は5000件です');
+    if (!await _saveReviewChanges([...reviewRows, ...data])) return;
+    if (mounted)
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${data.length}件を追加しました。重複する明細は修正内容を保護しました。')),
+      );
+  }
+
+  Future<bool> _saveReviewChanges(List<Map<String, dynamic>> list) async {
+    try {
+      await widget.onChange(list);
+      if (mounted) setState(() => reviewRows = list);
+      return true;
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('保存できませんでした: $e')));
+      return false;
+    }
+  }
+
+  Future<void> _receiveFromPc() async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('PCの解析結果を受け取る'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('PCで「スマホで修正するQRを作成」を押し、そのQRを読み取ってください。URLの貼り付けも使えます。'),
+              TextField(
+                controller: controller,
+                decoration: const InputDecoration(labelText: '結果受信用URL'),
+                keyboardType: TextInputType.url,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('戻る'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final scanned = await Navigator.push<String>(
+                ctx,
+                MaterialPageRoute(
+                  builder: (_) => const _QrPage(title: 'PCの結果受信用QRを読む'),
+                ),
+              );
+              if (scanned != null && ctx.mounted) Navigator.pop(ctx, scanned);
+            },
+            child: const Text('QRを読む'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('受信'),
+          ),
+        ],
+      ),
+    );
+    if (value == null || !mounted) return;
+    setState(() => receiving = true);
+    try {
+      final csv = await widget.receive(value);
+      if (mounted) await _acceptCsv(csv);
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('受信できません: $e。同じWi-FiとPCの起動状態を確認してください。')),
+        );
+    } finally {
+      if (mounted) setState(() => receiving = false);
+    }
+  }
+
   Future<void> _importCsv() async {
     final files = await FilePicker.pickFiles(
       type: FileType.custom,
@@ -1327,55 +1477,8 @@ class _ReviewPageState extends State<_ReviewPage> {
       final sourcePath = files.single.path;
       if (sourcePath == null) throw const FormatException('選択したファイルを開けません');
       final text = await File(sourcePath).readAsString(encoding: utf8);
-      if (text.length > 2 * 1024 * 1024)
-        throw const FormatException('CSVは2MB以内にしてください');
-      final rows = _parseCsv(text);
-      if (rows.length < 2)
-        throw const FormatException('明細入りのOISO解析CSVを選んでください');
-      final headers = rows.first.map((s) => s.trim()).toList();
-      const required = ['receiptId', 'date', 'vendor', 'amount', 'category'];
-      if (headers.toSet().length != headers.length ||
-          !required.every(headers.contains)) {
-        throw const FormatException(
-          'receiptId・date・vendor・amount・category列が必要です',
-        );
-      }
-      if (rows.length - 1 > 5000)
-        throw const FormatException('一度に読み込める明細は5000件までです');
-      final seen = <String>{};
-      final existing = widget.reviews
-          .map((r) => '${r['receiptId'] ?? r['id'] ?? ''}')
-          .toSet();
-      final data = rows
-          .skip(1)
-          .where((r) => r.any((v) => v.trim().isNotEmpty))
-          .map((row) {
-            if (row.length != headers.length)
-              throw const FormatException('CSVの列数が一致しません');
-            final m = <String, dynamic>{};
-            for (var i = 0; i < headers.length && i < row.length; i++) {
-              m[headers[i]] = row[i].trim();
-            }
-            final id = '${m['receiptId'] ?? ''}'.trim();
-            if (id.isEmpty || !seen.add(id))
-              throw const FormatException('receiptIdが空欄または重複しています');
-            if (existing.contains(id)) return null;
-            return <String, dynamic>{
-              'receiptId': id,
-              'date': '${m['date'] ?? ''}',
-              'vendor': m['vendor'] ?? '',
-              'amount': '${m['amount'] ?? ''}'
-                  .replaceAll(',', '')
-                  .replaceAll('¥', ''),
-              'category': m['category'] ?? '',
-              'confidence': '${m['confidence'] ?? ''}',
-              'confirmed': false,
-            };
-          })
-          .whereType<Map<String, dynamic>>()
-          .toList();
-      widget.onChange([...widget.reviews, ...data]);
-      setState(() {});
+      await _acceptCsv(text);
+      if (mounted) setState(() {});
     } catch (e) {
       if (mounted)
         ScaffoldMessenger.of(
@@ -1384,7 +1487,7 @@ class _ReviewPageState extends State<_ReviewPage> {
     }
   }
 
-  void _confirm(Map<String, dynamic> record) {
+  Future<void> _confirm(Map<String, dynamic> record) async {
     final issues = _reviewIssues(record);
     if (issues.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1392,12 +1495,11 @@ class _ReviewPageState extends State<_ReviewPage> {
       );
       return;
     }
-    final list = [...widget.reviews];
+    final list = [...reviewRows];
     final index = list.indexOf(record);
     if (index < 0) return;
     list[index] = {...record, 'confirmed': true};
-    widget.onChange(list);
-    setState(() {});
+    await _saveReviewChanges(list);
   }
 
   Future<void> _edit(Map<String, dynamic> r) async {
@@ -1409,27 +1511,29 @@ class _ReviewPageState extends State<_ReviewPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('解析結果を編集'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: date,
-              decoration: const InputDecoration(labelText: '日付（YYYY-MM-DD）'),
-            ),
-            TextField(
-              controller: vendor,
-              decoration: const InputDecoration(labelText: '店舗・商品名'),
-            ),
-            TextField(
-              controller: amount,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: '金額'),
-            ),
-            TextField(
-              controller: category,
-              decoration: const InputDecoration(labelText: 'カテゴリ'),
-            ),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: date,
+                decoration: const InputDecoration(labelText: '日付（YYYY-MM-DD）'),
+              ),
+              TextField(
+                controller: vendor,
+                decoration: const InputDecoration(labelText: '店舗・商品名'),
+              ),
+              TextField(
+                controller: amount,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: '金額'),
+              ),
+              TextField(
+                controller: category,
+                decoration: const InputDecoration(labelText: 'カテゴリ'),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -1444,23 +1548,22 @@ class _ReviewPageState extends State<_ReviewPage> {
       ),
     );
     if (ok == true) {
-      final list = [...widget.reviews];
+      final list = [...reviewRows];
       final i = list.indexOf(r);
       list[i] = {
         ...r,
         'date': date.text,
         'vendor': vendor.text,
-        'amount': int.tryParse(amount.text) ?? 0,
+        'amount': amount.text.trim(),
         'category': category.text,
         'confirmed': false,
       };
-      widget.onChange(list);
-      setState(() {});
+      await _saveReviewChanges(list);
     }
   }
 
   Future<void> _exportCsv() async {
-    final confirmed = widget.reviews.where(
+    final confirmed = reviewRows.where(
       (r) => r['confirmed'] == true && _reviewIssues(r).isEmpty,
     );
     final lines = [
@@ -1672,15 +1775,25 @@ class _CropShadePainter extends CustomPainter {
       oldDelegate.crop != crop;
 }
 
-class _QrPage extends StatelessWidget {
-  const _QrPage();
+class _QrPage extends StatefulWidget {
+  const _QrPage({this.title = 'Relay QRを読み取る'});
+  final String title;
+  @override
+  State<_QrPage> createState() => _QrPageState();
+}
+
+class _QrPageState extends State<_QrPage> {
+  bool returned = false;
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Relay QRを読み取る')),
+    appBar: AppBar(title: Text(widget.title)),
     body: MobileScanner(
       onDetect: (capture) {
         final raw = capture.barcodes.firstOrNull?.rawValue;
-        if (raw != null && context.mounted) Navigator.pop(context, raw);
+        if (raw != null && context.mounted && !returned) {
+          returned = true;
+          Navigator.pop(context, raw);
+        }
       },
     ),
   );

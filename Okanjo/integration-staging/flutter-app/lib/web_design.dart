@@ -356,7 +356,7 @@ class _HistoryPageState extends State<_HistoryPage> {
         OutlinedButton.icon(
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => _ReviewPage(
+              builder: (_) => ReceiptReviewPage(
                 reviews: LedgerStore.instance.reviews(),
                 onChange: (r) => LedgerStore.instance.saveReviews(r),
               ),

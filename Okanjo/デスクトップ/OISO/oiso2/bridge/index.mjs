@@ -11,6 +11,7 @@ import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import QRCode from 'qrcode';
+import { createResultShares, lanAddresses } from './result-shares.mjs';
 
 try {
   const envFile = await readFile(resolve(process.cwd(), '.env'), 'utf8');
@@ -24,6 +25,7 @@ const config = { token: process.env.DISCORD_BOT_TOKEN, channelId: process.env.DI
 const root = resolve(process.cwd(), 'bridge-data');
 const inbox = join(root, 'inbox');
 const results = join(root, 'results');
+const resultShares = createResultShares({ port: Number(process.env.RESULT_SHARE_PORT || 8789) });
 const imageExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 const mimeFor = filename => ({ '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' }[extname(filename).toLowerCase()] || 'image/jpeg');
 await Promise.all([mkdir(inbox, { recursive: true }), mkdir(results, { recursive: true })]);
@@ -122,11 +124,26 @@ async function bootDiscord() {
   await client.login(config.token);
 }
 function json(response, status, body) { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174' }); response.end(JSON.stringify(body)); }
-function parseBody(request) { return new Promise((resolveBody, reject) => { let text = ''; request.on('data', chunk => { text += chunk; if (text.length > 100000) request.destroy(); }); request.on('end', () => { try { resolveBody(text ? JSON.parse(text) : {}); } catch { reject(new Error('JSON形式が不正です')); } }); request.on('error', reject); }); }
+function parseBody(request, limit = 100000) { request.setEncoding('utf8'); return new Promise((resolveBody, reject) => { let text = ''; request.on('data', chunk => { text += chunk; if (Buffer.byteLength(text) > limit) request.destroy(); }); request.on('end', () => { try { resolveBody(text ? JSON.parse(text) : {}); } catch { reject(new Error('JSON形式が不正です')); } }); request.on('error', reject); }); }
 const server = createServer(async (request, response) => {
   if(request.headers.origin && !/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(request.headers.origin)) return json(response,403,{error:'PC上のOISO2から操作してください'});
   if (request.method === 'OPTIONS') { response.writeHead(204, { 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' }); return response.end(); }
   try { const url = new URL(request.url, `http://${request.headers.host}`);
+    if (request.method === 'POST' && url.pathname === '/api/result-shares') {
+      const addresses = lanAddresses();
+      if (!addresses.length) throw Error('PCをWi-Fiまたは家庭内LANに接続してください');
+      const body = await parseBody(request, 3 * 1024 * 1024);
+      const share = await resultShares.create(body.csv);
+      const links = await Promise.all(addresses.map(async address => {
+        const url = `http://${address}:${share.port}/s/${share.token}/`;
+        return { address, url, qrDataUrl: await QRCode.toDataURL(url, { margin: 1, width: 280 }) };
+      }));
+      return json(response, 201, { ...share, links });
+    }
+    if (request.method === 'POST' && url.pathname === '/api/result-shares/revoke') {
+      const body = await parseBody(request); resultShares.revoke(body.token);
+      return json(response, 200, { ok: true });
+    }
     if (request.method === 'GET' && url.pathname === '/mobile-review-data.js') {
       response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
       return response.end(await readFile(join(appDirectory, '../../../スマートフォン/OISO/instant-ledger/frontend-app/review-data.js')));
@@ -135,7 +152,7 @@ const server = createServer(async (request, response) => {
       response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
       return response.end(await readFile(join(appDirectory, 'ledger.js')));
     }
-    const assets = { '/': ['index.html', 'text/html'], '/workspace.js': ['workspace.js', 'text/javascript'], '/theme.js': ['theme.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'], '/tax.js': ['tax.js', 'text/javascript'], '/tax-ui.js': ['tax-ui.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
+    const assets = { '/result-share.js': ['result-share.js', 'text/javascript'], '/': ['index.html', 'text/html'], '/workspace.js': ['workspace.js', 'text/javascript'], '/theme.js': ['theme.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'], '/tax.js': ['tax.js', 'text/javascript'], '/tax-ui.js': ['tax-ui.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
     if (request.method === 'GET' && assets[url.pathname]) {
       const [name, type] = assets[url.pathname];
       response.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` });

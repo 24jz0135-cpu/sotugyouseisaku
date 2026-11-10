@@ -24,7 +24,7 @@
     const visible=records.filter(row=>filter==='all'||(filter==='pending'?!row.confirmed:row.confirmed));
     page=Math.min(page,Math.max(0,Math.ceil(visible.length/pageSize)-1));
     const out=$('review-list');out.replaceChildren();
-    if(!visible.length)out.append(element('p',records.length?'該当する明細はありません。':'Discordから解析結果のCSVを保存し、「解析CSVを読み込む」で選んでください。'));
+    if(!visible.length)out.append(element('p',records.length?'該当する明細はありません。':'PCから結果を受信するか、解析結果のCSVを読み込んでください。'));
     visible.slice(page*pageSize,(page+1)*pageSize).forEach(row=>{
       const card=element('article');card.className='review-card';
       card.append(element('h3',row.receiptId));
@@ -54,6 +54,11 @@
     $('review-page').textContent=`${page+1} / ${Math.max(1,Math.ceil(visible.length/pageSize))}`;
     $('review-prev').disabled=page===0;$('review-next').disabled=(page+1)*pageSize>=visible.length;
   }
+  globalThis.importOisoReviewCsv=text=>{
+    const result=OisoReview.merge(records,OisoReview.parseCsv(text));
+    save(result.records);page=0;$('review-filter').value='all';render();message(`${result.added}件を追加しました。同じIDの${result.skipped}件は、保存済みの修正を守るため追加していません。`);
+    return result;
+  };
   document.addEventListener('DOMContentLoaded',()=>{
     try{records=OisoReview.validateSaved(JSON.parse(localStorage.getItem(KEY)||'[]'));}
     catch(error){blocked=true;message(`保存済みの確認データを読み込めません。上書きせず停止しました: ${error.message}`);}
@@ -62,8 +67,7 @@
       const file=event.target.files[0];if(!file)return;event.target.disabled=true;
       try{
         if(file.size>2*1024*1024)throw Error('CSVは2MB以内にしてください');
-        const incoming=OisoReview.parseCsv(await file.text()),result=OisoReview.merge(records,incoming);
-        save(result.records);page=0;$('review-filter').value='all';render();message(`${result.added}件を追加しました。同じIDの${result.skipped}件は、保存済みの修正を守るため追加していません。`);
+        globalThis.importOisoReviewCsv(await file.text());
       }catch(error){message(`読み込めませんでした: ${error.message}`);}
       finally{event.target.value='';event.target.disabled=blocked;}
     };

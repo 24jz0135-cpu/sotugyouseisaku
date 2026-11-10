@@ -45,8 +45,12 @@ class LedgerStore {
 
   Future<void> saveRecords(List<Map<String, dynamic>> value) async =>
       _prefs.setString(_recordsKey, jsonEncode(value));
-  Future<void> saveReviews(List<Map<String, dynamic>> value) async =>
-      _prefs.setString(_reviewsKey, jsonEncode(value));
+  Future<void> saveReviews(List<Map<String, dynamic>> value) async {
+    if (!await _prefs.setString(_reviewsKey, jsonEncode(value))) {
+      throw const FileSystemException('解析結果を端末に保存できませんでした');
+    }
+  }
+
   Future<void> saveSettings(Map<String, dynamic> value) async =>
       _prefs.setString(_settingsKey, jsonEncode(value));
   Future<void> savePresets(List<Map<String, dynamic>> value) async =>
