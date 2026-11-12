@@ -365,6 +365,12 @@ class _HistoryPageState extends State<_HistoryPage> {
           icon: const Icon(LucideIcons.fileCheck, size: 16),
           label: const Text('解析結果の確認'),
         ),
+        TextButton.icon(
+          onPressed: widget.onLogin,
+          icon: const Icon(Icons.login),
+          label: const Text('ログイン画面へ'),
+        ),
+        const Text('端末内で利用中 · データはこの端末に保存されます', textAlign: TextAlign.center),
       ],
     );
   }

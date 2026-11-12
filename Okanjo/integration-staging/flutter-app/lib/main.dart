@@ -15,6 +15,7 @@ import 'package:share_plus/share_plus.dart';
 
 import 'data_store.dart';
 import 'result_transfer.dart';
+import 'login_page.dart';
 part 'web_design.dart';
 
 void main() async {
@@ -86,6 +87,7 @@ class OisoApp extends StatefulWidget {
 }
 
 class _OisoAppState extends State<OisoApp> {
+  bool useLocalData = false;
   String theme = LedgerStore.instance.theme;
   void setTheme(String value) {
     setState(() => theme = value);
@@ -186,13 +188,23 @@ class _OisoAppState extends State<OisoApp> {
         ),
         dividerColor: c.line,
       ),
-      home: _Shell(theme: theme, palette: c, onTheme: setTheme),
+      home: useLocalData
+          ? _Shell(
+              theme: theme,
+              palette: c,
+              onTheme: setTheme,
+              onLogin: () => setState(() => useLocalData = false),
+            )
+          : LoginPage(
+              onContinueLocally: () => setState(() => useLocalData = true),
+            ),
     );
   }
 }
 
 class _Shell extends StatefulWidget {
   const _Shell({
+    required this.onLogin,
     required this.theme,
     required this.palette,
     required this.onTheme,
@@ -200,6 +212,7 @@ class _Shell extends StatefulWidget {
   final String theme;
   final _Palette palette;
   final ValueChanged<String> onTheme;
+  final VoidCallback onLogin;
   @override
   State<_Shell> createState() => _ShellState();
 }
@@ -278,6 +291,7 @@ class _ShellState extends State<_Shell> {
         },
       ),
       _HistoryPage(
+        onLogin: widget.onLogin,
         records: records,
         onChange: (r) async {
           records = r;
@@ -623,6 +637,7 @@ class _PhotoThumb extends StatelessWidget {
 
 class _HistoryPage extends StatefulWidget {
   const _HistoryPage({
+    required this.onLogin,
     required this.records,
     required this.onChange,
     required this.onRelay,
@@ -630,7 +645,7 @@ class _HistoryPage extends StatefulWidget {
   });
   final List<Map<String, dynamic>> records;
   final ValueChanged<List<Map<String, dynamic>>> onChange;
-  final VoidCallback onRelay, onAdd;
+  final VoidCallback onRelay, onAdd, onLogin;
   @override
   State<_HistoryPage> createState() => _HistoryPageState();
 }

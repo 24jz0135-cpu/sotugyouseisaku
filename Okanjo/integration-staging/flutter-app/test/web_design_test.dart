@@ -13,50 +13,82 @@ void main() {
     directory = await Directory.systemTemp.createTemp('oaiso-design-test-');
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'),
-          (_) async => directory.path);
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (_) async => directory.path,
+        );
     await LedgerStore.instance.init();
     await LedgerStore.instance.saveRecords([
-      {'id':'design-1','timestamp':DateTime.now().toIso8601String(),
-       'vendor_name':'テスト店舗','amount':1250,'category':'消耗品費','status':'pending'},
-      {'id':'design-2','timestamp':DateTime.now().toIso8601String(),
-       'vendor_name':'確定済み店舗','amount':750,'category':'交通費','status':'confirmed'},
+      {
+        'id': 'design-1',
+        'timestamp': DateTime.now().toIso8601String(),
+        'vendor_name': 'テスト店舗',
+        'amount': 1250,
+        'category': '消耗品費',
+        'status': 'pending',
+      },
+      {
+        'id': 'design-2',
+        'timestamp': DateTime.now().toIso8601String(),
+        'vendor_name': '確定済み店舗',
+        'amount': 750,
+        'category': '交通費',
+        'status': 'confirmed',
+      },
     ]);
   });
-  tearDownAll(() async => directory.delete(recursive:true));
+  tearDownAll(() async => directory.delete(recursive: true));
 
   for (final width in [320.0, 390.0]) {
-    for (final theme in ['light','dark','brown','ocean','forest']) {
-      testWidgets('$theme at $width: dashboard, capture, history and settings fit', (tester) async {
-        tester.view.physicalSize=Size(width,844);
-        tester.view.devicePixelRatio=1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        await LedgerStore.instance.saveTheme(theme);
-        await tester.pumpWidget(const OisoApp());
-        await tester.runAsync(() async { await Future<void>.delayed(const Duration(milliseconds:100)); });
-        await tester.pumpAndSettle();
-        expect(find.text('ダッシュボード'),findsOneWidget);
-        expect(find.text('¥2,000'),findsOneWidget);
-        expect(find.text('¥1,250'),findsWidgets);
-        expect(find.text('¥750'),findsOneWidget);
-        expect(tester.takeException(),isNull);
-        await tester.tap(find.text('レシート保管'));
-        await tester.pumpAndSettle();
-        expect(find.text('写真を追加する'),findsOneWidget);
-        expect(tester.takeException(),isNull);
-        await tester.tap(find.text('履歴一覧'));
-        await tester.pumpAndSettle();
-        expect(find.text('端末バックアップ'),findsOneWidget);
-        expect(tester.takeException(),isNull);
-        await tester.tap(find.byTooltip('テーマを選択'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('詳細設定'));
-        await tester.pumpAndSettle();
-        expect(find.text('THEME CUSTOMIZATION'),findsOneWidget);
-        expect(find.text('見た目を保存'),findsOneWidget);
-        expect(tester.takeException(),isNull);
-      });
+    for (final theme in ['light', 'dark', 'brown', 'ocean', 'forest']) {
+      testWidgets(
+        '$theme at $width: dashboard, capture, history and settings fit',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          await LedgerStore.instance.saveTheme(theme);
+          await tester.pumpWidget(const OisoApp());
+          await tester.ensureVisible(find.byKey(const Key('login-local')));
+          await tester.tap(find.byKey(const Key('login-local')));
+          await tester.runAsync(() async {
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+          });
+          await tester.pumpAndSettle();
+          expect(find.text('ダッシュボード'), findsOneWidget);
+          expect(find.text('¥2,000'), findsOneWidget);
+          expect(find.text('¥1,250'), findsWidgets);
+          expect(find.text('¥750'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.tap(find.text('レシート保管'));
+          await tester.pumpAndSettle();
+          expect(find.text('写真を追加する'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.tap(find.text('履歴一覧'));
+          await tester.pumpAndSettle();
+          expect(find.text('端末バックアップ'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.scrollUntilVisible(find.text('ログイン画面へ').hitTestable(), 150);
+          await tester.tap(find.text('ログイン画面へ'));
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('login-email')), findsOneWidget);
+          await tester.ensureVisible(find.byKey(const Key('login-local')));
+          await tester.tap(find.byKey(const Key('login-local')));
+          await tester.runAsync(() async {
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+          });
+          await tester.pumpAndSettle();
+          expect(find.text('¥2,000'), findsOneWidget);
+          await tester.tap(find.byTooltip('テーマを選択'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('詳細設定'));
+          await tester.pumpAndSettle();
+          expect(find.text('THEME CUSTOMIZATION'), findsOneWidget);
+          expect(find.text('見た目を保存'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+      );
     }
   }
 }
