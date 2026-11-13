@@ -1,0 +1,9 @@
+**
+!Okanjo/
+!Okanjo/共通/
+!Okanjo/共通/OISO/
+!Okanjo/共通/OISO/common-relay/
+!Okanjo/共通/OISO/common-relay/package.json
+!Okanjo/共通/OISO/common-relay/package-lock.json
+!Okanjo/共通/OISO/common-relay/index.mjs
+!Okanjo/共通/OISO/common-relay/lifecycle.mjs

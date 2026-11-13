@@ -20,7 +20,7 @@
 ## Northflankでの起動
 
 - GitHubリポジトリの `main` を選び、Combined serviceとして作成する。
-- Build context: `/Okanjo/共通/OISO/common-relay`、Dockerfile location: `/Dockerfile`。
+- Build context: `/`、Dockerfile location: `/deploy/common-relay/Dockerfile`（リポジトリのルート基準）。Northflankのパス入力制約に合わせ、起動設定は英数字の場所に置く。専用の `Dockerfile.dockerignore` でソース4ファイルのみを取り込み、`.env` や保存データを除外する。
 - Runtime variable `DISCORD_BOT_TOKEN` に本人がBotトークンを設定する。Gitやビルド引数へ含めない。
 - HTTPの公開ポートは `3000`、ヘルスチェックは `GET /health`。起動後は応答の `discord: true` まで確認する。
 - 永続ボリュームを `/app/relay-data` にマウントし、インスタンスは1つにする。永続ボリュームなしでは再配置時にペアリング情報や削除待ちの情報が失われるため、本運用しない。利用可能なプラン・料金を画面で確認してから作成する。
