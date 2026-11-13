@@ -17,6 +17,16 @@
 5. `oiso-common-relay.service` の `User` と `WorkingDirectory` を実環境に合わせ、`/etc/systemd/system/` へ配置する。`systemctl enable --now oiso-common-relay` で常駐化する。
 6. Nginx/CaddyなどのHTTPSリバースプロキシ経由で公開し、PC Bridgeの `COMMON_RELAY_URL` にその `https://` URLを設定する。Nodeの3000番ポートをインターネットへ直接公開しない。
 
+## Northflankでの起動
+
+- GitHubリポジトリの `main` を選び、Combined serviceとして作成する。
+- Build context: `/Okanjo/共通/OISO/common-relay`、Dockerfile location: `/Dockerfile`。
+- Runtime variable `DISCORD_BOT_TOKEN` に本人がBotトークンを設定する。Gitやビルド引数へ含めない。
+- HTTPの公開ポートは `3000`、ヘルスチェックは `GET /health`。起動後は応答の `discord: true` まで確認する。
+- 永続ボリュームを `/app/relay-data` にマウントし、インスタンスは1つにする。永続ボリュームなしでは再配置時にペアリング情報や削除待ちの情報が失われるため、本運用しない。利用可能なプラン・料金を画面で確認してから作成する。
+- 公開されたHTTPS URLをPC Bridgeの `COMMON_RELAY_URL` に設定する。
+- Dockerでは `HOST=0.0.0.0`。従来のVM直接起動は `127.0.0.1` のまま。保存先は `RELAY_DATA_DIR` で変更できる。
+
 ## 提供者が持つもの・持たないもの
 
 - 持つ: 共通Discord Botのトークン、接続先チャンネルID、短時間の受信メタデータ。
