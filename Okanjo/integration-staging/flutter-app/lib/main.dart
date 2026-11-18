@@ -5,7 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -222,6 +221,7 @@ class _ShellState extends State<_Shell> {
   List<Map<String, dynamic>> records = [];
   List<Map<String, dynamic>> reviews = [];
   List<File> photos = [];
+  Map<String, Map<String, dynamic>> receiptStates = {};
   Map<String, dynamic> settings = {};
   bool loading = true;
   final picker = ImagePicker();
@@ -237,6 +237,9 @@ class _ShellState extends State<_Shell> {
     reviews = LedgerStore.instance.reviews();
     settings = LedgerStore.instance.settings();
     photos = await LedgerStore.instance.photos();
+    receiptStates = {
+      for (final row in await LedgerStore.instance.receipts()) '${row['path']}': row,
+    };
     if (mounted) setState(() => loading = false);
   }
 
@@ -247,6 +250,9 @@ class _ShellState extends State<_Shell> {
 
   Future<void> _refreshPhotos() async {
     photos = await LedgerStore.instance.photos();
+    receiptStates = {
+      for (final row in await LedgerStore.instance.receipts()) '${row['path']}': row,
+    };
     if (mounted) setState(() {});
   }
 
@@ -262,6 +268,33 @@ class _ShellState extends State<_Shell> {
     _message('写真を端末に保存しました');
   }
 
+  Future<void> _shareReceiptBatch() async {
+    final pending = photos.where((file) {
+      final status = '${receiptStates[file.path]?['status'] ?? 'unprocessed'}';
+      return status == 'unprocessed' || status == 'failed';
+    }).take(10).toList();
+    if (pending.isEmpty) {
+      _message('共有できる未解析レシートがありません');
+      return;
+    }
+    await SharePlus.instance.share(ShareParams(
+      files: pending.map((file) => XFile(file.path)).toList(),
+      text: 'レシート画像を1枚ずつ読み取り、CSVのみを返してください。列は receiptId,date,vendor,amount,category,transactionType,paymentMethod,confidence。金額は税込円、日付はYYYY-MM-DD。売上はincome、仕入はpurchase、経費はexpense、現金はcash、掛はcredit。読めない値は空欄にしてください。',
+    ));
+  }
+  Future<void> _exportLedgerCsv() async {
+    final rows = <String>[
+      'date,transaction_type,payment_method,vendor,amount,category,status,receipt_id',
+      ...records.map((r) {
+        final date = '${r['timestamp'] ?? ''}'.split('T').first;
+        final values = [date, r['transaction_type'] ?? 'expense', r['payment_method'] ?? 'cash', r['vendor_name'] ?? '', r['amount'] ?? 0, r['category'] ?? '', r['status'] ?? 'pending', r['receipt_id'] ?? ''];
+        return values.map((v) => '"${'$v'.replaceAll('"', '""')}"').join(',');
+      }),
+    ];
+    final file = File(p.join((await getTemporaryDirectory()).path, 'oaiso-ledger-${DateTime.now().year}.csv'));
+    await file.writeAsString('\uFEFF${rows.join('\r\n')}');
+    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: 'Oaiso帳簿データCSV'));
+  }
   void _message(String text) {
     if (mounted)
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
@@ -282,28 +315,34 @@ class _ShellState extends State<_Shell> {
       ),
       _ReceiptsPage(
         photos: photos,
+        receiptStates: receiptStates,
+        onShareBatch: _shareReceiptBatch,
         onAdd: _addPhoto,
         onDelete: (file) async {
           await LedgerStore.instance.deletePhoto(file.path);
-          records.removeWhere((r) => r['image_path'] == file.path);
+          for (final record in records.where((r) => r['image_path'] == file.path)) {
+            record['image_path'] = null;
+          }
           await _persistRecords();
           await _refreshPhotos();
         },
       ),
       _HistoryPage(
-        onLogin: widget.onLogin,
+        onExport: _exportLedgerCsv,
+        onReview: _openReviewPage,
         records: records,
         onChange: (r) async {
           records = r;
           await _persistRecords();
         },
-        onRelay: _relay,
         onAdd: () => _showAddRecord(),
       ),
       ReceiptReviewPage(
         reviews: reviews,
+        onApprove: _approveReview,
         onChange: (r) async {
           await LedgerStore.instance.saveReviews(r);
+          await _refreshPhotos();
           if (mounted) setState(() => reviews = r);
         },
       ),
@@ -349,75 +388,160 @@ class _ShellState extends State<_Shell> {
     );
   }
 
+  void _openReviewPage() {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReceiptReviewPage(
+      reviews: reviews,
+      onApprove: _approveReview,
+      onChange: (rows) async {
+        await LedgerStore.instance.saveReviews(rows);
+        await _refreshPhotos();
+        if (mounted) setState(() => reviews = rows);
+      },
+    )));
+  }
+  Future<void> _approveReview(Map<String, dynamic> row) async {
+    final receiptId = '${row['receiptId'] ?? row['receipt_id'] ?? ''}';
+    final existingIndex = records.indexWhere((r) => receiptId.isNotEmpty && '${r['receipt_id'] ?? ''}' == receiptId);
+    final category = '${row['category'] ?? 'その他'}';
+    final kind = '${row['transaction_type'] ?? (category == '売上高' ? 'income' : (category == '仕入高' ? 'purchase' : 'expense'))}';
+    final receiptRows = await LedgerStore.instance.receipts();
+    final receiptIndex = receiptRows.indexWhere((r) => '${r['id']}' == receiptId);
+    final receipt = receiptIndex >= 0 ? receiptRows[receiptIndex] : null;
+    final record = <String, dynamic>{
+      'id': existingIndex >= 0 ? records[existingIndex]['id'] : DateTime.now().microsecondsSinceEpoch.toString(),
+      'timestamp': '${row['date'] ?? DateTime.now().toIso8601String().substring(0, 10)}T00:00:00.000',
+      'sensor_type': 'AI_REVIEW',
+      'raw_text': row['vendor'],
+      'vendor_name': row['vendor'],
+      'amount': int.tryParse('${row['amount'] ?? ''}') ?? 0,
+      'category': category,
+      'transaction_type': kind,
+      'payment_method': '${row['payment_method'] ?? 'cash'}',
+      'status': 'confirmed',
+      if (receiptId.isNotEmpty) 'receipt_id': receiptId,
+      if (receipt != null) 'image_path': receipt['path'],
+    };
+    if (existingIndex >= 0) {
+      records[existingIndex] = record;
+    } else {
+      records.insert(0, record);
+    }
+    await _persistRecords();
+    if (receiptId.isNotEmpty) await LedgerStore.instance.linkReceipt(receiptId, '${record['id']}');
+    await _refreshPhotos();
+  }
   Future<void> _showAddRecord([Map<String, dynamic>? existing]) async {
-    final vendor = TextEditingController(
-      text: existing?['vendor_name']?.toString() ?? '',
-    );
-    final amount = TextEditingController(
-      text: existing?['amount']?.toString() ?? '',
-    );
-    final category = TextEditingController(
-      text: existing?['category']?.toString() ?? '',
-    );
+    final vendor = TextEditingController(text: existing?['vendor_name']?.toString() ?? '');
+    final amount = TextEditingController(text: existing?['amount']?.toString() ?? '');
+    final category = TextEditingController(text: existing?['category']?.toString() ?? '');
+    var transactionType = '${existing?['transaction_type'] ?? 'expense'}';
+    var paymentMethod = '${existing?['payment_method'] ?? 'cash'}';
+    var occurredAt = DateTime.tryParse('${existing?['timestamp'] ?? ''}') ?? DateTime.now();
+    const categories = <String>[
+      '売上高', '仕入高', '租税公課', '荷造運賃', '水道光熱費', '旅費交通費',
+      '通信費', '広告宣伝費', '接待交際費', '損害保険料', '修繕費', '消耗品費',
+      '福利厚生費', '給料賃金', '外注工賃', '利子割引料', '地代家賃', '貸倒金',
+      '減価償却費', '車両費', '新聞図書費', '研修費', '雑費', 'その他',
+    ];
     final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(existing == null ? '経費を登録' : '記録を編集'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: vendor,
-              decoration: const InputDecoration(labelText: '店舗・内容'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, refresh) => AlertDialog(
+          title: Text(existing == null ? '取引を登録' : '取引を編集'),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                DropdownButtonFormField<String>(
+                  value: transactionType,
+                  decoration: const InputDecoration(labelText: '取引種別'),
+                  items: const [
+                    DropdownMenuItem(value: 'income', child: Text('売上')),
+                    DropdownMenuItem(value: 'purchase', child: Text('仕入')),
+                    DropdownMenuItem(value: 'expense', child: Text('経費')),
+                  ],
+                  onChanged: (v) => refresh(() => transactionType = v ?? 'expense'),
+                ),
+                TextField(controller: vendor, decoration: const InputDecoration(labelText: '取引先・内容')),
+                TextField(controller: amount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '金額（円・税込、返金はマイナス）')),
+                DropdownButtonFormField<String>(
+                  value: categories.contains(category.text) ? category.text : 'その他',
+                  decoration: const InputDecoration(labelText: '科目'),
+                  items: categories.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                  onChanged: (v) => category.text = v ?? 'その他',
+                ),
+                DropdownButtonFormField<String>(
+                  value: paymentMethod,
+                  decoration: const InputDecoration(labelText: '決済方法'),
+                  items: const [
+                    DropdownMenuItem(value: 'cash', child: Text('現金・即時決済')),
+                    DropdownMenuItem(value: 'credit', child: Text('掛・後払い')),
+                  ],
+                  onChanged: (v) => refresh(() => paymentMethod = v ?? 'cash'),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('取引日'),
+                  subtitle: Text('${occurredAt.year}-${occurredAt.month.toString().padLeft(2, '0')}-${occurredAt.day.toString().padLeft(2, '0')}'),
+                  trailing: const Icon(Icons.calendar_month),
+                  onTap: () async {
+                    final picked = await showDatePicker(context: ctx, initialDate: occurredAt, firstDate: DateTime(2000), lastDate: DateTime(2100));
+                    if (picked != null) refresh(() => occurredAt = picked);
+                  },
+                ),
+                const Align(alignment: Alignment.centerLeft, child: Text('税込金額で記録します。税区分や掛の入金・支払管理は今後の帳簿拡張で扱います。', style: TextStyle(fontSize: 11))),
+              ]),
             ),
-            TextField(
-              controller: amount,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: '金額'),
-            ),
-            TextField(
-              controller: category,
-              decoration: const InputDecoration(labelText: 'カテゴリ'),
-            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('キャンセル')),
+            FilledButton(onPressed: () {
+              final parsedAmount = int.tryParse(amount.text.replaceAll(',', '').trim());
+              if (vendor.text.trim().isEmpty || parsedAmount == null || parsedAmount == 0) {
+                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('取引先・内容と金額を入力してください。返品・返金はマイナスで入力します')));
+                return;
+              }
+              Navigator.pop(ctx, {
+                'vendor': vendor.text.trim(),
+                'amount': '$parsedAmount',
+                'category': category.text.trim().isEmpty ? 'その他' : category.text.trim(),
+                'transaction_type': transactionType,
+                'payment_method': paymentMethod,
+                'timestamp': DateTime(occurredAt.year, occurredAt.month, occurredAt.day).toIso8601String(),
+              });
+            }, child: const Text('保存')),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('キャンセル'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, {
-              'vendor': vendor.text,
-              'amount': amount.text,
-              'category': category.text,
-            }),
-            child: const Text('保存'),
-          ),
-        ],
       ),
     );
+    vendor.dispose();
+    amount.dispose();
+    category.dispose();
     if (result == null) return;
-    if (existing == null)
+    if (existing == null) {
       records.insert(0, {
         'id': DateTime.now().microsecondsSinceEpoch.toString(),
-        'timestamp': DateTime.now().toIso8601String(),
+        'timestamp': result['timestamp'],
         'sensor_type': 'MANUAL',
         'raw_text': result['vendor'],
         'vendor_name': result['vendor'],
         'amount': int.tryParse(result['amount'] ?? '') ?? 0,
         'category': result['category'],
+        'transaction_type': result['transaction_type'],
+        'payment_method': result['payment_method'],
         'status': 'pending',
       });
-    else {
+    } else {
       existing['vendor_name'] = result['vendor'];
       existing['raw_text'] = result['vendor'];
       existing['amount'] = int.tryParse(result['amount'] ?? '') ?? 0;
       existing['category'] = result['category'];
+      existing['transaction_type'] = result['transaction_type'];
+      existing['payment_method'] = result['payment_method'];
+      existing['timestamp'] = result['timestamp'];
     }
     await _persistRecords();
   }
-
   void _openThemeSettings() => Navigator.push(
     context,
     MaterialPageRoute(
@@ -437,157 +561,16 @@ class _ShellState extends State<_Shell> {
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('使い方'),
-      content: const Text(
-        'レシート保管で撮影・選択した写真は端末内に保存されます。履歴一覧で記録を確認し、PCへ送信（Relay）からOISO2 Bridgeへ転送できます。解析結果CSVは「解析結果の確認」画面から読み込み、内容を確認して確定してください。',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('閉じる'),
-        ),
-      ],
+      content: const Text('取引は種別・決済方法・取引日を入力して登録します。撮影したレシートは端末に保存し、最大10枚を共有して外部AIで手動解析できます。結果CSVを読み込み、確認後に帳簿へ登録してください。データは端末内に保存されます。'),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('閉じる'))],
     ),
   );
-
-  Future<void> _relay() async {
-    final previousConfig = settings['relayConfig'];
-    final configText = TextEditingController(
-      text: previousConfig is Map ? jsonEncode(previousConfig) : '',
-    );
-    final value = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          MediaQuery.of(ctx).viewInsets.bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'PCへ送信（Relay）',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            const Text('Bridgeが表示するRelay QRを読み取るか、QRの内容を貼り付けてください。'),
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              onPressed: () async {
-                final code = await Navigator.push<String>(
-                  ctx,
-                  MaterialPageRoute(builder: (_) => const _QrPage()),
-                );
-                if (code != null && ctx.mounted) Navigator.pop(ctx, code);
-              },
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text('QRを読み取る'),
-            ),
-            TextField(
-              controller: configText,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Relay設定JSON',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 10),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, configText.text),
-              child: const Text('接続して送信'),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (value == null || value.trim().isEmpty) return;
-    try {
-      final config = jsonDecode(value) as Map<String, dynamic>;
-      if (config['format'] != 'oiso-relay') {
-        throw const FormatException('Relay設定ではありません');
-      }
-      final endpoint = Uri.parse(config['uploadUrl'] as String);
-      if (endpoint.scheme != 'https' ||
-          endpoint.host != 'discord.com' ||
-          !endpoint.path.startsWith('/api/webhooks/')) {
-        throw const FormatException('Bridgeが発行したDiscord送信先ではありません');
-      }
-      final expiry = config['expiresAt'];
-      final expiryTime = expiry is num
-          ? DateTime.fromMillisecondsSinceEpoch(expiry.toInt())
-          : DateTime.tryParse('$expiry');
-      if (expiryTime == null || DateTime.now().isAfter(expiryTime)) {
-        throw const FormatException('Relay QRの有効期限が切れています');
-      }
-      settings['relayConfig'] = config;
-      final sent = List<String>.from(config['sentReceiptIds'] ?? []);
-      final unsent = photos
-          .where((f) => !sent.contains(p.basename(f.path)))
-          .toList();
-      if (unsent.isEmpty) {
-        _message('送信する未送信写真はありません');
-        return;
-      }
-      var delivered = 0;
-      for (var start = 0; start < unsent.length; start += 10) {
-        final batch = unsent.skip(start).take(10).toList();
-        final size = batch.fold<int>(0, (sum, file) => sum + file.lengthSync());
-        if (size > 20 * 1024 * 1024) {
-          throw const FormatException('一度に送れる写真の合計は20MBまでです');
-        }
-        final uri = endpoint.replace(
-          queryParameters: {...endpoint.queryParameters, 'wait': 'true'},
-        );
-        http.Response? response;
-        for (var attempt = 0; attempt < 3; attempt++) {
-          final req = http.MultipartRequest('POST', uri);
-          req.fields['payload_json'] = jsonEncode({
-            'content':
-                'OISO Relay ${config['sessionId'] ?? ''} · ${batch.length}件',
-          });
-          for (var i = 0; i < batch.length; i++) {
-            req.files.add(
-              await http.MultipartFile.fromPath(
-                'files[$i]',
-                batch[i].path,
-                filename: p.basename(batch[i].path),
-              ),
-            );
-          }
-          response = await http.Response.fromStream(await req.send());
-          if (response.statusCode != 429) break;
-          final wait =
-              double.tryParse(response.headers['retry-after'] ?? '') ?? 1;
-          await Future<void>.delayed(
-            Duration(milliseconds: (wait * 1000).round()),
-          );
-        }
-        if (response == null ||
-            response.statusCode < 200 ||
-            response.statusCode >= 300) {
-          throw HttpException(
-            'Relay送信エラー: HTTP ${response?.statusCode ?? '不明'}',
-          );
-        }
-        sent.addAll(batch.map((file) => p.basename(file.path)));
-        config['sentReceiptIds'] = sent;
-        settings['relayConfig'] = config;
-        await LedgerStore.instance.saveSettings(settings);
-        delivered += batch.length;
-      }
-      _message('$delivered枚をPCの受信箱へ送信しました');
-    } catch (e) {
-      _message('Relay設定を確認してください: $e');
-    }
-  }
 }
 
 class _PhotoThumb extends StatelessWidget {
-  const _PhotoThumb({required this.file, required this.onDelete});
+  const _PhotoThumb({required this.file, required this.status, required this.onDelete});
   final File file;
+  final String status;
   final VoidCallback onDelete;
   @override
   Widget build(BuildContext context) => Stack(
@@ -603,6 +586,17 @@ class _PhotoThumb extends StatelessWidget {
           file,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
+        ),
+      ),
+      Positioned(
+        left: 6,
+        bottom: 6,
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: Colors.black.withValues(alpha: .72), borderRadius: BorderRadius.circular(4)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            child: Text(_receiptStatusLabel(status), style: const TextStyle(color: Colors.white, fontSize: 10)),
+          ),
         ),
       ),
       Positioned(
@@ -637,15 +631,17 @@ class _PhotoThumb extends StatelessWidget {
 
 class _HistoryPage extends StatefulWidget {
   const _HistoryPage({
-    required this.onLogin,
+    required this.onExport,
+    required this.onReview,
     required this.records,
     required this.onChange,
-    required this.onRelay,
     required this.onAdd,
   });
   final List<Map<String, dynamic>> records;
+  final VoidCallback onExport;
+  final VoidCallback onReview;
   final ValueChanged<List<Map<String, dynamic>>> onChange;
-  final VoidCallback onRelay, onAdd, onLogin;
+  final VoidCallback onAdd;
   @override
   State<_HistoryPage> createState() => _HistoryPageState();
 }
@@ -655,9 +651,10 @@ class _RecordCard extends StatelessWidget {
     required this.record,
     required this.onEdit,
     required this.onConfirm,
+    required this.onDelete,
   });
   final Map<String, dynamic> record;
-  final VoidCallback onEdit, onConfirm;
+  final VoidCallback onEdit, onConfirm, onDelete;
   @override
   Widget build(BuildContext context) => Card(
     child: Padding(
@@ -671,6 +668,11 @@ class _RecordCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              IconButton(
+                tooltip: '取引を削除',
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline, size: 19),
+              ),
               TextButton.icon(
                 onPressed: onEdit,
                 icon: const Icon(Icons.edit_outlined, size: 17),
@@ -711,7 +713,7 @@ class _RecordTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
-        '${record['category'] ?? '未分類'} · ${when == null ? '日付なし' : '${when.year}/${when.month}/${when.day}'} · ${_confirmed(record) ? '確定済み' : '未確定'}',
+        '${_transactionLabel(record)} • ${record['category'] ?? '未分類'} • ${when == null ? '日付なし' : '${when.year}/${when.month}/${when.day}'} • ${record['payment_method'] == 'credit' ? '掛' : '現金'} • ${_confirmed(record) ? '確認済み' : '未確認'}',
       ),
       trailing: Text(
         '¥${_money(_num(record['amount']))}',
@@ -1270,10 +1272,12 @@ class ReceiptReviewPage extends StatefulWidget {
     super.key,
     required this.reviews,
     required this.onChange,
+    this.onApprove,
     this.receive = receiveResultCsv,
   });
   final List<Map<String, dynamic>> reviews;
   final Future<void> Function(List<Map<String, dynamic>>) onChange;
+  final Future<void> Function(Map<String, dynamic>)? onApprove;
   final Future<String> Function(String) receive;
   @override
   State<ReceiptReviewPage> createState() => ReceiptReviewPageState();
@@ -1395,6 +1399,11 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
                 .replaceAll(',', '')
                 .replaceAll('¥', ''),
             'category': m['category'] ?? '',
+            'transaction_type': m['transactionType'] ??
+                (m['category'] == '売上高'
+                    ? 'income'
+                    : (m['category'] == '仕入高' ? 'purchase' : 'expense')),
+            'payment_method': m['paymentMethod'] ?? 'cash',
             'confidence': '${m['confidence'] ?? ''}',
             'confirmed': false,
           };
@@ -1404,6 +1413,9 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
     if (reviewRows.length + data.length > 5000)
       throw const FormatException('保存件数の上限は5000件です');
     if (!await _saveReviewChanges([...reviewRows, ...data])) return;
+    for (final row in data) {
+      await LedgerStore.instance.setReceiptStatus('${row['receiptId']}', 'needs_review');
+    }
     if (mounted)
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${data.length}件を追加しました。重複する明細は修正内容を保護しました。')),
@@ -1514,6 +1526,9 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
     final index = list.indexOf(record);
     if (index < 0) return;
     list[index] = {...record, 'confirmed': true};
+    if (widget.onApprove != null) {
+      await widget.onApprove!(list[index]);
+    }
     await _saveReviewChanges(list);
   }
 
@@ -1582,7 +1597,7 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
       (r) => r['confirmed'] == true && _reviewIssues(r).isEmpty,
     );
     final lines = [
-      'receiptId,date,vendor,amount,category,confidence',
+      'receiptId,date,vendor,amount,category,transactionType,paymentMethod,confidence',
       ...confirmed.map(
         (r) => [
           r['receiptId'] ?? r['id'],
@@ -1590,6 +1605,8 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
           r['vendor'],
           r['amount'],
           r['category'],
+          r['transaction_type'] ?? 'expense',
+          r['payment_method'] ?? 'cash',
           r['confidence'],
         ].map((v) => '"${('$v').replaceAll('"', '""')}"').join(','),
       ),
@@ -1898,58 +1915,63 @@ class _PhotoSurface extends StatelessWidget {
   }
 }
 
-Future<Map<String, dynamic>?> _editRecord(
-  BuildContext context,
-  Map<String, dynamic> record,
-) async {
+Future<Map<String, dynamic>?> _editRecord(BuildContext context, Map<String, dynamic> record) async {
   final vendor = TextEditingController(text: '${record['vendor_name'] ?? ''}');
   final amount = TextEditingController(text: '${record['amount'] ?? 0}');
   final category = TextEditingController(text: '${record['category'] ?? ''}');
-  final result = await showDialog<bool>(
+  var type = '${record['transaction_type'] ?? 'expense'}';
+  var payment = '${record['payment_method'] ?? 'cash'}';
+  var date = DateTime.tryParse('${record['timestamp'] ?? ''}') ?? DateTime.now();
+  final saved = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('記録を編集'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: vendor,
-            decoration: const InputDecoration(labelText: '店舗・内容'),
-          ),
-          TextField(
-            controller: amount,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: '金額'),
-          ),
-          TextField(
-            controller: category,
-            decoration: const InputDecoration(labelText: 'カテゴリ'),
-          ),
-        ],
-      ),
+    builder: (ctx) => StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
+      title: const Text('取引を編集'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        DropdownButtonFormField<String>(value: type, decoration: const InputDecoration(labelText: '取引種別'), items: const [
+          DropdownMenuItem(value: 'income', child: Text('売上')),
+          DropdownMenuItem(value: 'purchase', child: Text('仕入')),
+          DropdownMenuItem(value: 'expense', child: Text('経費')),
+        ], onChanged: (v) => refresh(() => type = v ?? 'expense')),
+        TextField(controller: vendor, decoration: const InputDecoration(labelText: '取引先・内容')),
+        TextField(controller: amount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '金額（円・税込、返金はマイナス）')),
+        TextField(controller: category, decoration: const InputDecoration(labelText: '科目')),
+        DropdownButtonFormField<String>(value: payment, decoration: const InputDecoration(labelText: '決済方法'), items: const [
+          DropdownMenuItem(value: 'cash', child: Text('現金・即時決済')),
+          DropdownMenuItem(value: 'credit', child: Text('掛・後払い')),
+        ], onChanged: (v) => refresh(() => payment = v ?? 'cash')),
+        ListTile(title: const Text('取引日'), subtitle: Text('${date.year}-${date.month}-${date.day}'), trailing: const Icon(Icons.calendar_month), onTap: () async {
+          final selected = await showDatePicker(context: ctx, initialDate: date, firstDate: DateTime(2000), lastDate: DateTime(2100));
+          if (selected != null) refresh(() => date = selected);
+        }),
+      ])),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('キャンセル'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(ctx, true),
-          child: const Text('保存'),
-        ),
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+        FilledButton(onPressed: () {
+          if (vendor.text.trim().isEmpty || (int.tryParse(amount.text.replaceAll(',', '').trim()) ?? 0) == 0) {
+            ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('取引先と金額を入力してください。返品・返金はマイナスで入力します')));
+            return;
+          }
+          Navigator.pop(ctx, true);
+        }, child: const Text('保存')),
       ],
-    ),
+    )),
   );
-  return result == true
-      ? {
-          ...record,
-          'vendor_name': vendor.text,
-          'raw_text': vendor.text,
-          'amount': int.tryParse(amount.text) ?? 0,
-          'category': category.text,
-        }
-      : null;
+  final editedVendor = vendor.text;
+  final editedAmount = int.tryParse(amount.text.replaceAll(',', '').trim()) ?? 0;
+  final editedCategory = category.text;
+  vendor.dispose(); amount.dispose(); category.dispose();
+  if (saved != true) return null;
+  return {
+    ...record,
+    'vendor_name': editedVendor,
+    'raw_text': editedVendor,
+    'amount': editedAmount,
+    'category': editedCategory,
+    'transaction_type': type,
+    'payment_method': payment,
+    'timestamp': DateTime(date.year, date.month, date.day).toIso8601String(),
+  };
 }
-
 Future<void> _backup(BuildContext context) async {
   try {
     final json = await LedgerStore.instance.exportBackup();
@@ -2048,6 +2070,18 @@ List<String> _reviewIssues(Map<String, dynamic> row) {
   return issues;
 }
 
+String _transactionLabel(Map<String, dynamic> row) => switch ('${row['transaction_type'] ?? 'expense'}') {
+  'income' => '売上',
+  'purchase' => '仕入',
+  _ => '経費',
+};
+String _receiptStatusLabel(String value) => switch (value) {
+  'processing' => '解析中',
+  'needs_review' => '確認待ち',
+  'registered' => '登録済み',
+  'failed' => '要再処理',
+  _ => '未解析',
+};
 String _money(int value) => value.toString().replaceAllMapped(
   RegExp(r'(?<=\d)(?=(\d{3})+$)'),
   (_) => ',',

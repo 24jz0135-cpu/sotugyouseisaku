@@ -200,182 +200,125 @@ class _WebHeader extends StatelessWidget {
 }
 
 class _HistoryPageState extends State<_HistoryPage> {
-  String filter = 'すべて';
+  String filter = 'all';
+  String kindFilter = 'all';
+  String query = '';
+
+  Future<void> _deleteRecord(Map<String, dynamic> record) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('取引を削除しますか？'),
+        content: Text('${record['vendor_name'] ?? '取引'} の記録を削除します。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('削除')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    widget.onChange(widget.records.where((r) => r['id'] != record['id']).toList());
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = _themes[LedgerStore.instance.theme] ?? _themes['light']!;
-    final rows = widget.records
-        .where(
-          (r) =>
-              filter == 'すべて' ||
-              (filter == '確定済み' ? _confirmed(r) : !_confirmed(r)),
-        )
-        .toList();
+    final rows = widget.records.where((r) {
+      final statusMatch = filter == 'all' || (filter == 'confirmed' ? _confirmed(r) : !_confirmed(r));
+      final kindMatch = kindFilter == 'all' || '${r['transaction_type'] ?? 'expense'}' == kindFilter;
+      final text = '${r['vendor_name'] ?? ''} ${r['category'] ?? ''} ${r['raw_text'] ?? ''}'.toLowerCase();
+      return statusMatch && kindMatch && text.contains(query.trim().toLowerCase());
+    }).toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
       children: [
-        Text('記録データ履歴', style: _webHeading(20)),
-        const SizedBox(height: 16),
-        Row(
-          children: ['すべて', '未確定', '確定済み']
-              .map(
-                (name) => Expanded(
-                  child: InkWell(
-                    onTap: () => setState(() => filter = name),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: filter == name ? c.accent : c.line,
-                            width: filter == name ? 2 : 1,
-                          ),
-                        ),
-                      ),
-                      child: Text(
-                        name,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: filter == name ? c.accent : c.muted,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
+        Text('取引記録', style: _webHeading(20)),
+        const SizedBox(height: 12),
+        TextField(
+          decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: '店名・内容・科目で検索', border: OutlineInputBorder()),
+          onChanged: (v) => setState(() => query = v),
         ),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: DropdownButtonFormField<String>(
+            value: filter,
+            decoration: const InputDecoration(labelText: '確認状態'),
+            items: const [
+              DropdownMenuItem(value: 'all', child: Text('すべて')),
+              DropdownMenuItem(value: 'pending', child: Text('未確認')),
+              DropdownMenuItem(value: 'confirmed', child: Text('確認済み')),
+            ],
+            onChanged: (v) => setState(() => filter = v ?? 'all'),
+          )),
+          const SizedBox(width: 8),
+          Expanded(child: DropdownButtonFormField<String>(
+            value: kindFilter,
+            decoration: const InputDecoration(labelText: '取引種別'),
+            items: const [
+              DropdownMenuItem(value: 'all', child: Text('すべて')),
+              DropdownMenuItem(value: 'income', child: Text('売上')),
+              DropdownMenuItem(value: 'purchase', child: Text('仕入')),
+              DropdownMenuItem(value: 'expense', child: Text('経費')),
+            ],
+            onChanged: (v) => setState(() => kindFilter = v ?? 'all'),
+          )),
+        ]),
         const SizedBox(height: 16),
         _Surface(
           target: 'backup',
           settings: LedgerStore.instance.settings(),
           palette: c,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '端末バックアップ',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '会計データと保存済みレシート画像を、.oaiso ファイルとして保存できます。',
-                style: TextStyle(fontSize: 10, height: 1.5, color: c.muted),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => _backup(context),
-                      icon: const Icon(LucideIcons.download, size: 14),
-                      label: const Text('バックアップ'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _restore(context),
-                      icon: const Icon(LucideIcons.upload, size: 14),
-                      label: const Text('復元'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('端末バックアップ', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('帳簿データ、レシート画像、解析状態を .oaiso ファイルに保存・復元します。', style: TextStyle(fontSize: 11, height: 1.5, color: c.muted)),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: FilledButton.icon(onPressed: () => _backup(context), icon: const Icon(LucideIcons.download, size: 14), label: const Text('バックアップ'))),
+              const SizedBox(width: 8),
+              Expanded(child: OutlinedButton.icon(onPressed: () => _restore(context), icon: const Icon(LucideIcons.upload, size: 14), label: const Text('復元'))),
+            ]),
+          ]),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         _Surface(
-          target: 'relay',
+          target: 'connection',
           settings: LedgerStore.instance.settings(),
           palette: c,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('PCへ送信（Relay）', style: _webHeading(16)),
-              const SizedBox(height: 6),
-              Text(
-                'PCのOISO2 Bridgeが作成した一時QRを読み込むと、保存済みレシートをDiscordアプリなしでPCへ配送できます。',
-                style: TextStyle(fontSize: 12, height: 1.6, color: c.muted),
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: widget.onRelay,
-                  child: const Text('QRを読み取る・送信する'),
-                ),
-              ),
-            ],
-          ),
+          child: const Text('PCとのLANペアリングはこれから実装します。今はレシート画像の一括共有とCSV取り込みを利用できます。'),
         ),
         const SizedBox(height: 16),
         if (rows.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            child: Center(
-              child: Text(
-                '該当する経費データがありません',
-                style: TextStyle(fontSize: 13, color: c.muted),
-              ),
-            ),
-          )
+          Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Center(child: Text('該当する取引はありません', style: TextStyle(fontSize: 13, color: c.muted))))
         else
-          ...rows.map(
-            (r) => _RecordCard(
-              record: r,
-              onEdit: () async {
-                final result = await _editRecord(context, r);
-                if (result != null) {
-                  final all = [...widget.records];
-                  final i = all.indexWhere((v) => v['id'] == r['id']);
-                  if (i >= 0) all[i] = result;
-                  widget.onChange(all);
-                }
-              },
-              onConfirm: () {
-                final all = widget.records
-                    .map((v) => Map<String, dynamic>.from(v))
-                    .toList();
+          ...rows.map((r) => _RecordCard(
+            record: r,
+            onEdit: () async {
+              final result = await _editRecord(context, r);
+              if (result != null) {
+                final all = [...widget.records];
                 final i = all.indexWhere((v) => v['id'] == r['id']);
-                if (i >= 0) all[i]['status'] = 'confirmed';
+                if (i >= 0) all[i] = result;
                 widget.onChange(all);
-              },
-            ),
-          ),
+              }
+            },
+            onConfirm: () {
+              final all = widget.records.map((v) => Map<String, dynamic>.from(v)).toList();
+              final i = all.indexWhere((v) => v['id'] == r['id']);
+              if (i >= 0) all[i]['status'] = 'confirmed';
+              widget.onChange(all);
+            },
+            onDelete: () => _deleteRecord(r),
+          )),
         const SizedBox(height: 16),
-        // Native-only functions remain reachable without changing the Web dashboard.
-        OutlinedButton.icon(
-          onPressed: widget.onAdd,
-          icon: const Icon(LucideIcons.plus, size: 16),
-          label: const Text('記録を追加'),
-        ),
-        OutlinedButton.icon(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ReceiptReviewPage(
-                reviews: LedgerStore.instance.reviews(),
-                onChange: (r) => LedgerStore.instance.saveReviews(r),
-              ),
-            ),
-          ),
-          icon: const Icon(LucideIcons.fileCheck, size: 16),
-          label: const Text('解析結果の確認'),
-        ),
-        TextButton.icon(
-          onPressed: widget.onLogin,
-          icon: const Icon(Icons.login),
-          label: const Text('ログイン画面へ'),
-        ),
-        const Text('端末内で利用中 · データはこの端末に保存されます', textAlign: TextAlign.center),
+        OutlinedButton.icon(onPressed: widget.onExport, icon: const Icon(Icons.table_view_outlined, size: 16), label: const Text('帳簿CSVを出力')),
+        OutlinedButton.icon(onPressed: widget.onAdd, icon: const Icon(LucideIcons.plus, size: 16), label: const Text('取引を追加')),
+        OutlinedButton.icon(onPressed: widget.onReview, icon: const Icon(LucideIcons.fileCheck, size: 16), label: const Text('解析結果を確認')),
+        const Text('データはこの端末に保存されます', textAlign: TextAlign.center),
       ],
     );
   }
 }
-
 // Values are shared with the mobile Web prototype's style.css.
 extension _WebPalette on _Palette {
   Color get muted => switch (name) {
@@ -501,11 +444,24 @@ class _HomePage extends StatelessWidget {
     }).toList();
     final pending = month.where((r) => !_confirmed(r)).toList();
     final verified = month.where(_confirmed).toList();
+    final approvedMonth = month.where(_confirmed).toList();
     int sum(List<Map<String, dynamic>> rows) =>
         rows.fold(0, (a, r) => a + _num(r['amount']));
-    final total = sum(month);
+    int sumKind(List<Map<String, dynamic>> rows, String kind) => sum(
+      rows.where((r) => '${r['transaction_type'] ?? 'expense'}' == kind).toList(),
+    );
+    final income = sumKind(approvedMonth, 'income');
+    final purchases = sumKind(approvedMonth, 'purchase');
+    final total = sumKind(approvedMonth, 'expense');
+    final net = income - purchases - total;
+    final annualRows = records.where((r) {
+      final d = DateTime.tryParse('${r['timestamp'] ?? ''}');
+      return d != null && d.year == now.year && _confirmed(r);
+    }).toList();
+    final annualNet = sumKind(annualRows, 'income') -
+        sumKind(annualRows, 'purchase') - sumKind(annualRows, 'expense');
     final categories = <String, int>{};
-    for (final r in month) {
+    for (final r in approvedMonth.where((r) => '${r['transaction_type'] ?? 'expense'}' == 'expense')) {
       final name = '${r['category'] ?? '未分類'}';
       categories[name] = (categories[name] ?? 0) + _num(r['amount']);
     }
@@ -590,6 +546,21 @@ class _HomePage extends StatelessWidget {
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 20),
+        _Surface(
+          target: 'summary',
+          settings: settings,
+          palette: palette,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('収支サマリー', style: _webHeading(15, color: palette.muted)),
+            const SizedBox(height: 10),
+            Text('今月  売上 ${_money(income)}円 − 仕入 ${_money(purchases)}円 − 経費 ${_money(total)}円 = 差引 ${_money(net)}円'),
+            const SizedBox(height: 6),
+            Text('${now.year}年累計の差引: ${_money(annualNet)}円', style: TextStyle(color: palette.muted)),
+            const SizedBox(height: 6),
+            const Text('税込の記録額を単純集計しています。掛の入金・支払、税額控除、青色申告決算書の計算は含みません。', style: TextStyle(fontSize: 10)),
+          ]),
         ),
         const SizedBox(height: 20),
         _Surface(
@@ -758,10 +729,14 @@ class _WebStat extends StatelessWidget {
 class _ReceiptsPage extends StatelessWidget {
   const _ReceiptsPage({
     required this.photos,
+    required this.receiptStates,
+    required this.onShareBatch,
     required this.onAdd,
     required this.onDelete,
   });
   final List<File> photos;
+  final Map<String, Map<String, dynamic>> receiptStates;
+  final VoidCallback onShareBatch;
   final Future<void> Function(ImageSource) onAdd;
   final Future<void> Function(File) onDelete;
   @override
@@ -826,6 +801,12 @@ class _ReceiptsPage extends StatelessWidget {
                   if (source != null) await onAdd(source);
                 },
               ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: photos.isEmpty ? null : onShareBatch,
+                icon: const Icon(Icons.outbox_outlined, size: 17),
+                label: const Text('未解析レシートを最大10枚まとめて共有'),
+              ),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -860,6 +841,7 @@ class _ReceiptsPage extends StatelessWidget {
                 ),
                 itemBuilder: (_, i) => _PhotoThumb(
                   file: photos[i],
+                  status: '${receiptStates[photos[i].path]?['status'] ?? 'unprocessed'}',
                   onDelete: () => onDelete(photos[i]),
                 ),
               ),
