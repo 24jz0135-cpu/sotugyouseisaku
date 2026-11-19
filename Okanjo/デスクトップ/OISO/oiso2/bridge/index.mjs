@@ -1,3 +1,4 @@
+import { start as startLan } from './lan-helper/server.mjs';
 import { saveLocalImage } from './upload.mjs';
 import { fileURLToPath } from 'node:url';
 const appDirectory = fileURLToPath(new URL('../', import.meta.url));
@@ -26,6 +27,7 @@ const root = resolve(process.cwd(), 'bridge-data');
 const inbox = join(root, 'inbox');
 const results = join(root, 'results');
 const resultShares = createResultShares({ port: Number(process.env.RESULT_SHARE_PORT || 8789) });
+const lanHelper = await startLan({ directory: join(root, 'lan'), port: 8793, adminPort: 8794, discoveryPort: 8795 });
 const imageExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 const mimeFor = filename => ({ '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' }[extname(filename).toLowerCase()] || 'image/jpeg');
 await Promise.all([mkdir(inbox, { recursive: true }), mkdir(results, { recursive: true })]);
@@ -127,8 +129,20 @@ function json(response, status, body) { response.writeHead(status, { 'Content-Ty
 function parseBody(request, limit = 100000) { request.setEncoding('utf8'); return new Promise((resolveBody, reject) => { let text = ''; request.on('data', chunk => { text += chunk; if (Buffer.byteLength(text) > limit) request.destroy(); }); request.on('end', () => { try { resolveBody(text ? JSON.parse(text) : {}); } catch { reject(new Error('JSON形式が不正です')); } }); request.on('error', reject); }); }
 const server = createServer(async (request, response) => {
   if(request.headers.origin && !/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(request.headers.origin)) return json(response,403,{error:'PC上のOISO2から操作してください'});
-  if (request.method === 'OPTIONS') { response.writeHead(204, { 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' }); return response.end(); }
+  if (request.method === 'OPTIONS') { response.writeHead(204, { 'Access-Control-Allow-Origin': 'http://127.0.0.1:4174', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Oiso-Lan' }); return response.end(); }
   try { const url = new URL(request.url, `http://${request.headers.host}`);
+    if (url.pathname.startsWith('/api/lan/')) {
+      if(!/^(127\.0\.0\.1|localhost):\d+$/.test(request.headers.host||'')) return json(response,403,{error:'localhostを使用してください'});
+      if(request.method==='POST' && request.headers['x-oiso-lan']!=='1') return json(response,403,{error:'OISO2画面から操作してください'});
+      const routes = { '/api/lan/state': ['GET','/api/state'], '/api/lan/pair': ['POST','/api/pair'], '/api/lan/revoke': ['POST','/api/revoke'] };
+      const route=routes[url.pathname];
+      if(!route || request.method!==route[0]) return json(response,404,{error:'not found'});
+      if(request.method==='POST' && request.headers['content-type']!=='application/json') return json(response,403,{error:'JSON形式で操作してください'});
+      const body=request.method==='POST'?await parseBody(request):null;
+      const result=await fetch('http://127.0.0.1:8794'+route[1], {method:route[0],headers:{'Content-Type':'application/json','X-Oaiso-Admin':'1'},...(body?{body:JSON.stringify(body)}:{})});
+      return json(response,result.status,await result.json());
+    }
+    if(request.method==='GET' && url.pathname==='/lan-pair.js') {response.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8'});return response.end(await readFile(join(appDirectory,'lan-pair.js')));}
     if (request.method === 'POST' && url.pathname === '/api/result-shares') {
       const addresses = lanAddresses();
       if (!addresses.length) throw Error('PCをWi-Fiまたは家庭内LANに接続してください');
