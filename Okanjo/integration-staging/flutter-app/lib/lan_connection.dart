@@ -76,20 +76,38 @@ class Lan {
   }
 
   Future<void> pair(String qr) async {
-    final c = jsonDecode(qr);
+    dynamic c;
+    try {
+      c = jsonDecode(qr.trim());
+    } catch (_) {
+      throw const FormatException(
+        '接続用ではないコードです。PCの「スマホで読むコードを表示」で作り直してください。結果受信用のコードは別の画面で読み取ります。',
+      );
+    }
     if (c is! Map ||
-        c['format'] != 'oiso2-lan-pair' ||
-        c['version'] != 1 ||
-        c['host'] is! String ||
+        !['oiso2-lan-pair', 'oaiso-lan-pair'].contains(c['format']) ||
+        c['version'] != 1) {
+      throw const FormatException(
+        '接続用ではないコードです。PCの「スマホで読むコードを表示」で作ったコードを読み取ってください。',
+      );
+    }
+    if (c['host'] is! String ||
         !privateAddress(c['host']) ||
         c['port'] is! int ||
         c['port'] < 1 ||
         c['port'] > 65535 ||
         c['fingerprint'] is! String ||
         !RegExp(r'^[a-f0-9]{64}$').hasMatch(c['fingerprint']) ||
-        c['expires'] is! int ||
-        c['expires'] < DateTime.now().millisecondsSinceEpoch) {
-      throw const FormatException('有効なOaiso LANのQRコードではありません');
+        c['serverId'] is! String ||
+        c['secret'] is! String ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(c['secret']) ||
+        c['expires'] is! int) {
+      throw const FormatException('接続コードの情報が不足しています。PCでコードを作り直してください。');
+    }
+    if (c['expires'] < DateTime.now().millisecondsSinceEpoch) {
+      throw const FormatException(
+        '接続コードの有効期限が切れています。PCでコードを作り直し、5分以内に読み取ってください。繰り返す場合はスマホとPCの日時を自動設定にしてください。',
+      );
     }
     final result = await request(
       'POST',

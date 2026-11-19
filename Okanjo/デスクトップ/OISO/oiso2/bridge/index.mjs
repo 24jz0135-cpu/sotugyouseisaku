@@ -166,7 +166,7 @@ const server = createServer(async (request, response) => {
       response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
       return response.end(await readFile(join(appDirectory, 'ledger.js')));
     }
-    const assets = { '/result-share.js': ['result-share.js', 'text/javascript'], '/': ['index.html', 'text/html'], '/workspace.js': ['workspace.js', 'text/javascript'], '/theme.js': ['theme.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'], '/tax.js': ['tax.js', 'text/javascript'], '/tax-ui.js': ['tax-ui.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
+    const assets = { '/beginner.js': ['beginner.js', 'text/javascript'], '/result-share.js': ['result-share.js', 'text/javascript'], '/': ['index.html', 'text/html'], '/workspace.js': ['workspace.js', 'text/javascript'], '/theme.js': ['theme.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'], '/tax.js': ['tax.js', 'text/javascript'], '/tax-ui.js': ['tax-ui.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
     if (request.method === 'GET' && assets[url.pathname]) {
       const [name, type] = assets[url.pathname];
       response.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` });

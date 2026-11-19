@@ -23,8 +23,8 @@
       const image = document.createElement('img'); image.alt = 'スマホで解析結果を受け取るQR'; image.width = 280; image.style.maxWidth = '100%';
       const link = document.createElement('a'); link.target = '_blank'; link.rel = 'noopener noreferrer'; link.style.overflowWrap = 'anywhere';
       const show = () => { const item = result.links[select.selectedIndex]; image.src = item.qrDataUrl; link.href = item.url; link.textContent = item.url; };
-      select.onchange = show; box.append(select, image, link); box.style.display = 'grid'; box.style.gap = '12px'; show();
-      status.textContent = `${result.count}件を共有中（${new Date(result.expiresAt).toLocaleTimeString('ja-JP')}まで）。同じWi-FiのスマホでQRを読んでください。表示中の結果のコピーを渡します。PCで変更した場合はQRを作り直してください。`;
+      const options=document.createElement('details');const title=document.createElement('summary');title.textContent='受け取れないとき：接続先を変更する';options.append(title,select,link);select.onchange = show; box.append(image,options); box.style.display = 'grid'; box.style.gap = '12px'; show();
+      status.textContent = `${result.count}件を共有中（${new Date(result.expiresAt).toLocaleTimeString('ja-JP')}まで）。スマホの「解析結果の確認」から、このコードを読み取ってください。PCで結果を変更した場合はコードを作り直してください。`;
     } catch (error) { status.textContent = `共有できません: ${error.message}`; }
     finally { button.disabled = false; }
   };

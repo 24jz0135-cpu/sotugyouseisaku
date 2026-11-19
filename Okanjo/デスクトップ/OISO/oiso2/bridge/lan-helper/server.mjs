@@ -114,7 +114,7 @@ export async function start({directory=path.join(here,'data'),port=8790,adminPor
     if(req.method==='POST'&&url.pathname==='/api/pair') {
       const b=await readJson(req,4096);const host=b.host||ipAddresses()[0];if(!ipAddresses().includes(host)) throw new Error('このPCのLANアドレスを選んでください');
       pairing={secret:token(),expires:Date.now()+5*60000};
-      const value={format:'oaiso-lan-pair',version:1,serverId:state.id,fingerprint,host,port:publicServer.address().port,secret:pairing.secret,expires:pairing.expires};
+      const value={format:'oiso2-lan-pair',version:1,serverId:state.id,fingerprint,host,port:publicServer.address().port,secret:pairing.secret,expires:pairing.expires};
       return send(res,200,{qr:await QRCode.toDataURL(JSON.stringify(value)),expires:pairing.expires});
     }
     if(req.method==='POST'&&url.pathname==='/api/revoke') {const b=await readJson(req,4096);state.devices=state.devices.filter(d=>d.id!==b.id);await save();return send(res,200,{ok:true});}
