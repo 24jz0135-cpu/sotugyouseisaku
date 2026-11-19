@@ -15,6 +15,7 @@ import 'package:share_plus/share_plus.dart';
 import 'data_store.dart';
 import 'result_transfer.dart';
 import 'login_page.dart';
+import 'lan_page.dart';
 part 'web_design.dart';
 
 void main() async {
@@ -348,6 +349,10 @@ class _ShellState extends State<_Shell> {
       ),
     ];
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LanConnectionPage())),
+        icon: const Icon(Icons.qr_code_scanner), label: const Text('PC接続'),
+      ),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(76),
         child: _WebHeader(

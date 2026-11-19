@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "discord.js": "^14.22.1",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "selfsigned": "^3.0.1"
   }
 }
