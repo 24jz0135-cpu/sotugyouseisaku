@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'lan_connection.dart';
@@ -31,8 +33,15 @@ class _LanConnectionPageState extends State<LanConnectionPage> {
     try {
       await action();
     } catch (e) {
-      status =
-          '接続できませんでした。${e is FormatException ? e.message : e}\n同じWi-FiとPCの起動状態を確認してください。';
+      if (e is FormatException) {
+        status = e.message;
+      } else if (e is HandshakeException) {
+        status = 'PCの本人確認ができませんでした。PCで接続コードを作り直してください。';
+      } else if (e is SocketException || e is TimeoutException) {
+        status = 'PCに通信できません。同じWi-FiとPCの起動状態、Windowsの接続許可を確認してください。';
+      } else {
+        status = '接続を完了できませんでした。もう一度お試しください。 $e';
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
