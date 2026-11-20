@@ -23,7 +23,7 @@ class _LanConnectionPageState extends State<LanConnectionPage> {
         await lan.connect();
         status = 'PCに接続しました';
       } else {
-        status = '初回はOISO2の「LAN接続QRを表示」を押してください';
+        status = '初回はPCのOaisoで「スマホで読むコードを表示」を押してください';
       }
     });
   }
@@ -66,6 +66,7 @@ class _LanConnectionPageState extends State<LanConnectionPage> {
     body: ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        const Text('Oaiso 0.2.0 · 本体統合版', style: TextStyle(fontSize: 14)),
         const Icon(Icons.devices, size: 64),
         const SizedBox(height: 24),
         const Text(
@@ -73,7 +74,9 @@ class _LanConnectionPageState extends State<LanConnectionPage> {
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        const Text('同じWi-FiのPCでOISO2 Bridgeを起動し、「LAN接続QRを表示」で作ったQRを読み取ります。'),
+        const Text(
+          'PCで「OISO2を起動.cmd」を開き、同じWi-Fiにつないでください。PC画面の「スマホで読むコードを表示」で作ったコードを読み取ります。',
+        ),
         const SizedBox(height: 24),
         Semantics(liveRegion: true, child: Text(status)),
         if (lan.pairing != null)

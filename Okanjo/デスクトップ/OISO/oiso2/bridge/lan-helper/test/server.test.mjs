@@ -22,6 +22,8 @@ test('pairing, upload dedupe, result roundtrip, backup isolation, revoke and res
       const req=https.request({host:'127.0.0.1',port:app.publicServer.address().port,path:route,method,rejectUnauthorized:false,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})}},res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>resolve({status:res.statusCode,body:JSON.parse(Buffer.concat(chunks))}));});req.on('error',reject);req.end(body?JSON.stringify(body):undefined);
     });
     assert.equal((await request('GET','/health')).status,401);
+    const expired=app.createPairing();expired.expires=Date.now()-1;
+    assert.equal((await request('POST','/pair',{secret:expired.secret})).status,403);
     const secret=app.createPairing().secret;
     const pair=await request('POST','/pair',{secret});assert.equal(pair.status,200);const token=pair.body.token;
     assert.equal((await request('POST','/pair',{secret})).status,403);

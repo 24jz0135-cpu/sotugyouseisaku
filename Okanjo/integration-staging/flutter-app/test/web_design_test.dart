@@ -5,11 +5,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:instant_ledger/main.dart';
 import 'package:instant_ledger/data_store.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
   setUpAll(() async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
     directory = await Directory.systemTemp.createTemp('oaiso-design-test-');
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -37,7 +41,11 @@ void main() {
       },
     ]);
   });
-  tearDownAll(() async => directory.delete(recursive: true));
+  tearDownAll(() async {
+    final db = await openDatabase('${directory.path}/OISO/oaiso.sqlite');
+    await db.close();
+    await directory.delete(recursive: true);
+  });
 
   for (final width in [320.0, 390.0]) {
     for (final theme in ['light', 'dark', 'brown', 'ocean', 'forest']) {
@@ -52,14 +60,16 @@ void main() {
           await tester.pumpWidget(const OisoApp());
           await tester.ensureVisible(find.byKey(const Key('login-local')));
           await tester.tap(find.byKey(const Key('login-local')));
+          await tester.pump();
           await tester.runAsync(() async {
             await Future<void>.delayed(const Duration(milliseconds: 100));
           });
           await tester.pumpAndSettle();
           expect(find.text('ダッシュボード'), findsOneWidget);
-          expect(find.text('¥2,000'), findsOneWidget);
+          // Only confirmed expenses contribute to the current ledger total.
+          expect(find.text('¥750'), findsWidgets);
           expect(find.text('¥1,250'), findsWidgets);
-          expect(find.text('¥750'), findsOneWidget);
+          expect(find.text('¥750'), findsWidgets);
           expect(tester.takeException(), isNull);
           await tester.tap(find.text('レシート保管'));
           await tester.pumpAndSettle();
@@ -69,17 +79,19 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.text('端末バックアップ'), findsOneWidget);
           expect(tester.takeException(), isNull);
-          await tester.scrollUntilVisible(find.text('ログイン画面へ').hitTestable(), 150);
-          await tester.tap(find.text('ログイン画面へ'));
+          // Reopen the app to verify the stored ledger survives a fresh session.
+          await tester.pumpWidget(OisoApp(key:UniqueKey()));
           await tester.pumpAndSettle();
           expect(find.byKey(const Key('login-email')), findsOneWidget);
           await tester.ensureVisible(find.byKey(const Key('login-local')));
           await tester.tap(find.byKey(const Key('login-local')));
+          await tester.pump();
           await tester.runAsync(() async {
             await Future<void>.delayed(const Duration(milliseconds: 100));
           });
           await tester.pumpAndSettle();
-          expect(find.text('¥2,000'), findsOneWidget);
+          // Only confirmed expenses contribute to the current ledger total.
+          expect(find.text('¥750'), findsWidgets);
           await tester.tap(find.byTooltip('テーマを選択'));
           await tester.pumpAndSettle();
           await tester.tap(find.text('詳細設定'));

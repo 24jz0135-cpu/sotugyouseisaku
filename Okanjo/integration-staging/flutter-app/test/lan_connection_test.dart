@@ -14,7 +14,7 @@ void main() {
         (call) async => null,
       );
   test(
-    'legacy QR is accepted and invalid/expired/result codes have specific guidance',
+    'legacy QR and clock skew are accepted; wrong-purpose codes are rejected',
     () async {
       final qr = {
         'format': 'oaiso-lan-pair',
@@ -49,16 +49,8 @@ void main() {
           ),
         ),
       );
-      await expectLater(
-        lan.pair(jsonEncode({...qr, 'expires': 0})),
-        throwsA(
-          isA<FormatException>().having(
-            (e) => e.message,
-            'guidance',
-            contains('有効期限'),
-          ),
-        ),
-      );
+      await lan.pair(jsonEncode({...qr, 'expires': 0}));
+      expect(lan.pairing?['serverId'], 'test-server');
     },
   );
   test(
@@ -80,7 +72,8 @@ void main() {
         expect(c['host'], isNotNull, reason: 'LANテストにはPCのプライベートIPv4アドレスが必要です');
         final lan = Lan();
         expect(c['format'], 'oiso2-lan-pair');
-        await lan.pair(jsonEncode(c));
+        // Simulate a phone whose local clock would consider the QR expired.
+        await lan.pair(jsonEncode({...c, 'expires': 0}));
         expect(
           (await lan.request('GET', '/health'))['serverId'],
           c['serverId'],

@@ -104,11 +104,8 @@ class Lan {
         c['expires'] is! int) {
       throw const FormatException('接続コードの情報が不足しています。PCでコードを作り直してください。');
     }
-    if (c['expires'] < DateTime.now().millisecondsSinceEpoch) {
-      throw const FormatException(
-        '接続コードの有効期限が切れています。PCでコードを作り直し、5分以内に読み取ってください。繰り返す場合はスマホとPCの日時を自動設定にしてください。',
-      );
-    }
+    // The PC enforces the one-time secret and its five-minute expiry.
+    // A phone clock mismatch must not reject an otherwise valid code.
     final result = await request(
       'POST',
       '/pair',

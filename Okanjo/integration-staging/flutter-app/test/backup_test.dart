@@ -4,12 +4,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:instant_ledger/data_store.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory directory;
   final store = LedgerStore.instance;
   setUpAll(() async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
     directory = await Directory.systemTemp.createTemp('oiso-backup-test-');
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -19,7 +23,11 @@ void main() {
         );
     await store.init();
   });
-  tearDownAll(() async => directory.delete(recursive: true));
+  tearDownAll(() async {
+    final db = await openDatabase('${directory.path}/OISO/oaiso.sqlite');
+    await db.close();
+    await directory.delete(recursive: true);
+  });
 
   test(
     'backup restores photos, records, reviews and theme presets on another device',

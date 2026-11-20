@@ -53,20 +53,16 @@ void main() {
     'receive, correct, confirm and re-receive preserve manual edits',
     (tester) async {
       var rows = <Map<String, dynamic>>[];
-      await tester.pumpWidget(
-        MaterialApp(
-          home: StatefulBuilder(
-            builder: (context, setState) => ReceiptReviewPage(
-              reviews: rows,
-              receive: (_) async => csv,
-              onChange: (next) async {
-                setState(() => rows = next);
-              },
-            ),
-          ),
-        ),
-      );
+      Widget screen()=>MaterialApp(key:UniqueKey(),home:StatefulBuilder(
+        builder:(context,setState)=>ReceiptReviewPage(reviews:rows,receive:(_)async=>csv,onChange:(next)async{setState(()=>rows=next);}),
+      ));
+      await tester.pumpWidget(screen());
       Future<void> receive() async {
+        await tester.scrollUntilVisible(
+          find.text('PCの結果をQRで受け取る'),
+          -200,
+          scrollable: find.byType(Scrollable).first,
+        );
         await tester.tap(find.text('PCの結果をQRで受け取る'));
         await tester.pumpAndSettle();
         await tester.enterText(find.byType(TextField), link);
@@ -95,6 +91,9 @@ void main() {
       await tester.tap(find.byIcon(Icons.check_circle_outline));
       await tester.pumpAndSettle();
       expect(rows.single['confirmed'], true);
+      // Reopen the review screen with saved edits before importing the same result.
+      await tester.pumpWidget(screen());
+      await tester.pumpAndSettle();
       await receive();
       expect(rows.length, 1);
       expect(rows.single['vendor'], '修正した店舗');
