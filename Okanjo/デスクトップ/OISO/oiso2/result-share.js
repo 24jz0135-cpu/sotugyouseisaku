@@ -1,5 +1,6 @@
 (() => {
-  let token;
+  let token;let revision=0;
+  document.addEventListener('oiso-work-changed',()=>{revision++;const old=token;token=null;box.replaceChildren();revoke.hidden=true;status.textContent='今回の読み取り結果で、コードを作り直してください。';if(old)bridgeRequest('/api/result-shares/revoke',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:old})}).catch(()=>{});});
   const button = document.getElementById('result-share');
   const status = document.getElementById('result-share-status');
   const box = document.getElementById('result-share-box');
@@ -8,14 +9,16 @@
     if (button.disabled) return;
     button.disabled = true;
     try {
-      if (!S.records?.length) throw Error('先に解析するか、解析結果を取り込んでください');
+      const rows=currentResultRows();const version=revision;
+      if (!rows.length) throw Error('先に解析するか、解析結果を取り込んでください');
       if (token) {
         await bridgeRequest('/api/result-shares/revoke', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
         token = null; box.replaceChildren(); revoke.hidden = true;
       }
       const fields = ['receiptId', 'date', 'vendor', 'amount', 'category', 'confidence'];
-      const csv = [fields.join(','), ...S.records.map(row => fields.map(key => '"' + String(row[key] ?? '').replaceAll('"', '""') + '"').join(','))].join('\r\n');
+      const csv = [fields.join(','), ...rows.map(row => fields.map(key => '"' + String(row[key] ?? '').replaceAll('"', '""') + '"').join(','))].join('\r\n');
       const result = await bridgeRequest('/api/result-shares', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv }) });
+      if(version!==revision){await bridgeRequest('/api/result-shares/revoke',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:result.token})});return;}
       token = result.token; box.replaceChildren(); revoke.hidden = false;
       const select = document.createElement('select');
       select.setAttribute('aria-label', 'スマホと同じネットワークのPCアドレス');
@@ -26,7 +29,7 @@
       const options=document.createElement('details');const title=document.createElement('summary');title.textContent='受け取れないとき：接続先を変更する';options.append(title,select,link);select.onchange = show; box.append(image,options); box.style.display = 'grid'; box.style.gap = '12px'; show();
       status.textContent = `${result.count}件を共有中（${new Date(result.expiresAt).toLocaleTimeString('ja-JP')}まで）。スマホの「解析結果の確認」から、このコードを読み取ってください。PCで結果を変更した場合はコードを作り直してください。`;
     } catch (error) { status.textContent = `共有できません: ${error.message}`; }
-    finally { button.disabled = false; }
+    finally { button.disabled = !currentResultRows().length; }
   };
   revoke.onclick = async () => {
     revoke.disabled = true;

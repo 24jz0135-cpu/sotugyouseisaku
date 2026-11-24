@@ -11,6 +11,7 @@
 <section id="step-images"><div class="step-title"><span>2</span><div><h2>レシートの写真を選ぶ</h2><p>スマホからパソコンに保存した写真も選べます。</p></div></div>
 <div class="help-card"><h3>スマホから届いた写真</h3><p>スマホの「レシート保管」→「写真をPCへ送信」から送ってください。届くとここに表示されます。</p><button id="received-refresh" class="sub">届いた写真を確認</button><p id="received-status" role="status">確認しています…</p><div id="received-photos" class="list"></div></div>
 <dialog id="received-viewer"><button id="received-close" type="button">閉じる</button><img id="received-full" alt="スマホから届いたレシートの元画像" style="display:block;max-width:100%;height:auto"></dialog>
+<button id="next-receipts" class="sub">次のレシートを始める</button><p id="work-switch-status" role="status"></p><details><summary>以前の作業を開く</summary><select id="work-history" aria-label="以前の作業"></select><button id="work-restore" class="sub">選んだ作業を開く</button></details>
 <label id="drop" class="drop" for="files"><b>ここを押して、写真を選ぶ</b><small>まとめて何枚でも選べます。写真をここに置いても追加できます。</small><input id="files" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden></label><p><strong id="count">0 枚</strong>の写真を準備しています。</p><p id="workspace-status" role="status"></p><div id="list" class="list"></div>
 <details><summary>以前PCに届いた写真から選ぶ</summary><p>以前の画像転送機能でPCに保存された写真を、一覧に追加します。スマホの接続登録とは別の機能です。</p><button id="bridge-import" class="sub" disabled>保存済みの写真を追加</button></details>
 <a class="next-link" href="#step-read">次へ：写真を読み取る ↓</a></section>

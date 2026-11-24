@@ -2,7 +2,8 @@
   const get=id=>document.getElementById(id);
   get('guide-open').onclick=()=>{get('guide').hidden=false;get('guide').scrollIntoView({behavior:'smooth'});};
   get('guide-close').onclick=()=>{get('guide').hidden=true;get('guide-open').focus();};
-  function refresh(){const count=S.records?.length||0;get('result-share').disabled=!count;get('return-count').textContent=count?`${count}件の読み取り結果があります。下のボタンで、スマホに渡してください。`:'まだ読み取り結果がありません。手順3で回答を受け取ると、ここからスマホへ渡せます。';}
+  function refresh(){const count=currentResultRows().length;get('result-share').disabled=!count;get('return-count').textContent=count?`${count}件の読み取り結果があります。下のボタンで、スマホに渡してください。`:'まだ読み取り結果がありません。手順3で回答を受け取ると、ここからスマホへ渡せます。';}
+  document.addEventListener('oiso-results-changed',refresh);
   new MutationObserver(refresh).observe(get('results'),{childList:true});refresh();
   get('answer-import').onclick=()=>{
     const text=get('answer').value.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');

@@ -52,6 +52,7 @@ function importLedger(rows,replace=false){
  if(ledgerBlocked)throw Error('保存データを読み込めないため、上書きを停止しています');
  const result=OisoLedger.merge(S.records||[],rows,replace);
  renderResults(result.records);saveLedger();
+ if(typeof setCurrentResults==='function'){setCurrentResults(rows.map(r=>r.receiptId||r.id));document.dispatchEvent(new Event('oiso-work-changed'));}
  $('ledger-import-status').textContent=`追加${result.inserted}件・更新${result.updated}件・既存を保護${result.skipped}件。更新した明細は申告用の確認をやり直してください。`;
 }
 function initLedger(){
