@@ -1,7 +1,7 @@
 name: instant_ledger
 description: "A new Flutter project."
 publish_to: 'none'
-version: 0.2.3+6
+version: 0.2.4+7
 
 environment:
   sdk: ^3.11.5

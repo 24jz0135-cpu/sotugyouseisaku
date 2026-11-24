@@ -25,6 +25,38 @@ void main() {
     expect(find.textContaining('誤読店舗'),findsOneWidget);
     expect(find.text('④ PCの結果コードを読む'),findsOneWidget);
   });
+  testWidgets('two more receipts append to two existing receipts through result QR', (tester) async {
+    var rows=[
+      <String,dynamic>{'receiptId':'R-001','vendor':'最初の店1','date':'2026-11-24','amount':'1000','category':'消耗品費','confirmed':true},
+      <String,dynamic>{'receiptId':'R-002','vendor':'最初の店2','date':'2026-11-24','amount':'2000','category':'消耗品費','confirmed':false},
+    ];
+    const nextCsv='receiptId,date,vendor,amount,category,confidence\nR-new-1,2026-11-24,次の店1,3000,消耗品費,0.9\nR-new-2,2026-11-24,次の店2,4000,消耗品費,0.9';
+    await tester.pumpWidget(MaterialApp(home:ReceiptReviewPage(
+      reviews:rows,readCodeOnOpen:true,scanResultCode:(_)async=>link,
+      receive:(_)async=>nextCsv,onChange:(value)async{rows=value;},
+    )));
+    await tester.pumpAndSettle();
+    expect(rows.length,4);
+    expect(rows.map((r)=>r['receiptId']),['R-new-1','R-new-2','R-001','R-002']);
+    expect(rows[2]['confirmed'],true);
+    expect(rows.take(2).every((r)=>r['confirmed']==false),true);
+    expect(find.byKey(const ValueKey('receipt-receive-status')),findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const ValueKey('receipt-receive-status'))).data,contains('今回2件を追加しました'));
+    expect(tester.widgetList<ListTile>(find.byType(ListTile)).first.title is Text,true);
+    expect((tester.widgetList<ListTile>(find.byType(ListTile)).first.title as Text).data,contains('次の店1'));
+    expect(tester.takeException(),isNull);
+  });
+  testWidgets('failed receipt receive labels the displayed rows as previously saved', (tester) async {
+    final rows=[<String,dynamic>{'receiptId':'R-001','vendor':'以前の店','date':'2026-11-24','amount':'1000','category':'消耗品費','confirmed':true}];
+    await tester.pumpWidget(MaterialApp(home:ReceiptReviewPage(
+      reviews:rows,readCodeOnOpen:true,scanResultCode:(_)async=>link,
+      receive:(_)async{throw Exception('offline');},onChange:(_)async{fail('Must not save after a receive failure');},
+    )));
+    await tester.pumpAndSettle();
+    expect(rows.length,1);
+    expect(tester.widget<Text>(find.byKey(const ValueKey('receipt-receive-status'))).data,contains('以前に保存した結果'));
+    expect(tester.takeException(),isNull);
+  });
   testWidgets('cancelled or pairing QR does not import or alter stored results', (tester) async {
     for(final code in <String?>[null,'{"format":"oiso2-lan-pair"}']) {
       var imports=0;
@@ -43,7 +75,7 @@ void main() {
     final rows=[<String,dynamic>{'receiptId':'keep','vendor':'未確定店舗','date':'2026-11-24','amount':'1200','category':'消耗品費','confirmed':false}];
     await tester.pumpWidget(MaterialApp(home:ReceiptReviewPage(reviews:rows,onChange:(_)async{throw Exception('保存失敗');})));
     await tester.ensureVisible(find.byIcon(Icons.check_circle_outline));await tester.tap(find.byIcon(Icons.check_circle_outline));await tester.pumpAndSettle();
-    expect(rows.single['confirmed'],false);expect(find.textContaining('保存できません'),findsOneWidget);expect(find.byIcon(Icons.check_circle),findsNothing);
+    expect(rows.single['confirmed'],false);expect(find.textContaining('保存できません'),findsWidgets);expect(find.byIcon(Icons.check_circle),findsNothing);
   });
   test(
     'accepts only local result links and retrieves bounded result CSV',
@@ -135,6 +167,7 @@ void main() {
       expect(rows.single['vendor'], '修正した店舗');
       expect(rows.single['amount'], '1500');
       expect(rows.single['confirmed'], true);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('receipt-receive-status'))).data,contains('すべて受け取り済みの番号'));
       expect(tester.takeException(), isNull);
     },
   );

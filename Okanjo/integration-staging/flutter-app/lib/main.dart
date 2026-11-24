@@ -1361,6 +1361,7 @@ class ReceiptReviewPage extends StatefulWidget {
 
 class ReceiptReviewPageState extends State<ReceiptReviewPage> {
   bool receiving = false;
+  String? receiveStatus;
   final Set<String> confirming={};
   late List<Map<String, dynamic>> reviewRows;
   @override
@@ -1398,6 +1399,8 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
           label: const Text('解析結果CSVを読み込む'),
         ),
         const SizedBox(height: 12),
+        Text(receiveStatus ?? '保存済みの解析結果は${reviewRows.length}件です。新しい結果は上のボタンから受け取ってください。', key: const ValueKey('receipt-receive-status')),
+        const SizedBox(height: 8),
         if (reviewRows.isEmpty)
           const Center(
             child: Padding(
@@ -1495,11 +1498,14 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
         .toList();
     if (reviewRows.length + data.length > 5000)
       throw const FormatException('保存件数の上限は5000件です');
-    if (!await _saveReviewChanges([...reviewRows, ...data])) return;
-    if (mounted)
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${data.length}件を追加しました。重複する明細は修正内容を保護しました。')),
-      );
+    final skipped = seen.length - data.length;
+    if (!await _saveReviewChanges([...data, ...reviewRows])) return;
+    if (!mounted) return;
+    final message = data.isEmpty
+        ? '今回の${seen.length}件はすべて受け取り済みの番号のため、追加していません。PCの④で新しいレシートの結果を共有しているか確認してください。保存済みの修正内容は保持しています。'
+        : '今回${data.length}件を追加しました。一覧の先頭から確認してください。保存済みは合計${reviewRows.length}件です。${skipped > 0 ? '同じ番号の$skipped件は追加せず、保存済みの修正内容を保持しました。' : ''}';
+    setState(() => receiveStatus = message);
+    _reviewNotice(message);
   }
 
   Future<bool> _saveReviewChanges(List<Map<String, dynamic>> list) async {
@@ -1508,10 +1514,10 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
       if (mounted) setState(() => reviewRows = list);
       return true;
     } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('保存できませんでした: $e')));
+      if (mounted) {
+        setState(() => receiveStatus = '保存できませんでした: $e。今回の変更は保存されていません。');
+        _reviewNotice(receiveStatus!);
+      }
       return false;
     }
   }
@@ -1578,16 +1584,16 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
   }
 
   Future<void> _receiveResult(String value) async {
-    setState(() => receiving = true);
+    setState(() { receiving = true; receiveStatus = 'PCから今回の結果を受信しています…'; });
     try {
       resultShareUri(value);
       final csv = await widget.receive(value);
       if (mounted) await _acceptCsv(csv);
     } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e is FormatException?e.message:'受信できませんでした。同じWi-FiとPCの起動状態を確認してください。')),
-        );
+      if (mounted) {
+        setState(() => receiveStatus = e is FormatException ? e.message : '受信できませんでした。同じWi-FiとPCの起動状態を確認してください。表示中の明細は以前に保存した結果です。');
+        _reviewNotice(receiveStatus!);
+      }
     } finally {
       if (mounted) setState(() => receiving = false);
     }
