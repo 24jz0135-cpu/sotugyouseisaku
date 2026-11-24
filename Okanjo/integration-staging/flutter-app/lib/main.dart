@@ -16,6 +16,7 @@ import 'data_store.dart';
 import 'result_transfer.dart';
 import 'login_page.dart';
 import 'lan_page.dart';
+import 'lan_connection.dart';
 part 'web_design.dart';
 
 void main() async {
@@ -225,6 +226,8 @@ class _ShellState extends State<_Shell> {
   Map<String, Map<String, dynamic>> receiptStates = {};
   Map<String, dynamic> settings = {};
   bool loading = true;
+  bool sendingPhotos=false;
+  String sendProgress="";
   final picker = ImagePicker();
 
   @override
@@ -267,6 +270,100 @@ class _ShellState extends State<_Shell> {
     await LedgerStore.instance.savePhoto(File(x.path));
     await _refreshPhotos();
     _message('写真を端末に保存しました');
+  }
+
+  Future<void> _sendPhotosToPc() async {
+    if (sendingPhotos) return;
+    await _refreshPhotos();
+    if (!mounted) return;
+    if (photos.isEmpty) {
+      _message('先にレシートを撮影するか、写真を追加してください');
+      return;
+    }
+    final selected = <String>{};
+    final chosen = await showDialog<List<File>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (c, update) => AlertDialog(
+          title: const Text('PCへ送る写真を選ぶ'),
+          content: SizedBox(
+            width: 360,
+            height: 360,
+            child: ListView(
+              children: photos
+                  .map(
+                    (f) => CheckboxListTile(
+                      value: selected.contains(f.path),
+                      onChanged: (value) => update(() {
+                        if (value == true) {
+                          selected.add(f.path);
+                        } else {
+                          selected.remove(f.path);
+                        }
+                      }),
+                      title: Image.file(
+                        f,
+                        height: 110,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const Text('画像を開けません'),
+                      ),
+                      subtitle: Text('写真 ${photos.indexOf(f) + 1}'),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('戻る'),
+            ),
+            FilledButton(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () => Navigator.pop(
+                      c,
+                      photos.where((f) => selected.contains(f.path)).toList(),
+                    ),
+              child: Text('${selected.length}枚を送信'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    setState(() {
+      sendingPhotos = true;
+      sendProgress = 'PCを確認しています…';
+    });
+    var sent = 0;
+    try {
+      final lan = Lan();
+      await lan.load();
+      await lan.connect();
+      for (final file in chosen) {
+        if (mounted)
+          setState(
+            () => sendProgress = 'PCへ送信中… ${sent + 1}/${chosen.length}枚',
+          );
+        await lan.sendPhoto(file);
+        sent++;
+      }
+      _message('$sent枚をPCに保存しました。PCの「スマホから届いた写真」を確認してください');
+      if (mounted) setState(() => sendProgress = '$sent枚をPCに保存しました');
+    } catch (e) {
+      final message = e is FormatException
+          ? e.message
+          : 'PCに送信できませんでした。同じWi-FiとPCの起動状態を確認してください';
+      _message('$sent/${chosen.length}枚を保存済み。$message');
+      if (mounted)
+        setState(
+          () =>
+              sendProgress = '$sent/${chosen.length}枚を保存済み。未送信の写真を選び直して再送できます',
+        );
+    } finally {
+      if (mounted) setState(() => sendingPhotos = false);
+    }
   }
 
   Future<void> _shareReceiptBatch() async {
@@ -318,6 +415,9 @@ class _ShellState extends State<_Shell> {
         photos: photos,
         receiptStates: receiptStates,
         onShareBatch: _shareReceiptBatch,
+        onSendToPc: _sendPhotosToPc,
+        sending: sendingPhotos,
+        sendProgress: sendProgress,
         onAdd: _addPhoto,
         onDelete: (file) async {
           await LedgerStore.instance.deletePhoto(file.path);
@@ -350,7 +450,7 @@ class _ShellState extends State<_Shell> {
     ];
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LanConnectionPage())),
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => LanConnectionPage(onSendPhotos:_sendPhotosToPc))),
         icon: const Icon(Icons.qr_code_scanner), label: const Text('PC接続'),
       ),
       appBar: PreferredSize(

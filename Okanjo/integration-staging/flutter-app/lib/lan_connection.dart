@@ -17,6 +17,26 @@ bool privateAddress(String host) {
 class Lan {
   static const storage = FlutterSecureStorage();
   Map<String, dynamic>? pairing;
+  Future<void> sendPhoto(File file) async {
+    if (pairing == null) throw const FormatException('先に「PC接続」でPCを登録してください');
+    final length = await file.length();
+    if (length == 0 || length > 20 * 1024 * 1024)
+      throw const FormatException('写真は20MB以内のJPEG・PNG・WebPを選んでください');
+    final bytes = await file.readAsBytes();
+    // Stable per-device content ID makes retries safe without changing phone receipt IDs.
+    final id = sha256
+        .convert([...utf8.encode('${pairing!['deviceId']}:'), ...bytes])
+        .toString()
+        .substring(0, 32);
+    final result = await request(
+      'POST',
+      '/receipts',
+      body: {'id': id, 'image': base64Encode(bytes)},
+    );
+    if (result is! Map || result['id'] != id)
+      throw const FormatException('PCの保存確認ができませんでした。もう一度送信してください');
+  }
+
   Future<void> load() async {
     final s = await storage.read(key: 'oiso2-lan-pair');
     if (s != null) pairing = Map<String, dynamic>.from(jsonDecode(s));

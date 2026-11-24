@@ -363,3 +363,5 @@ body {font-family:"Yu Gothic UI","Meiryo",system-ui,sans-serif;font-size:17px;li
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 
 .simple-main section p,.simple-main section li{font-size:17px}.simple-main section .note{font-size:14px}.theme-toggle{width:auto;min-width:90px;font:inherit;padding:8px 12px}.simple-main .step-title p{font-size:16px}
+
+#received-viewer{width:min(850px,94vw);max-height:90vh;overflow:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink)}#received-viewer::backdrop{background:#0008}#received-photos .tile p{font-size:13px;margin:8px}#received-photos .tile button{margin:8px;min-height:44px;font-size:15px}

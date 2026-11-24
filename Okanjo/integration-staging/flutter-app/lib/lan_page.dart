@@ -5,7 +5,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'lan_connection.dart';
 
 class LanConnectionPage extends StatefulWidget {
-  const LanConnectionPage({super.key});
+  const LanConnectionPage({super.key, this.onSendPhotos});
+  final Future<void> Function()? onSendPhotos;
   @override
   State<LanConnectionPage> createState() => _LanConnectionPageState();
 }
@@ -66,7 +67,7 @@ class _LanConnectionPageState extends State<LanConnectionPage> {
     body: ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        const Text('Oaiso 0.2.0 · 本体統合版', style: TextStyle(fontSize: 14)),
+        const Text('Oaiso 0.2.1 · 写真送信対応', style: TextStyle(fontSize: 14)),
         const Icon(Icons.devices, size: 64),
         const SizedBox(height: 24),
         const Text(
@@ -133,7 +134,13 @@ class _LanConnectionPageState extends State<LanConnectionPage> {
             child: const Text('接続情報を削除'),
           ),
         const SizedBox(height: 24),
-        const Text('この画面はPCとの接続・認証を行います。レシートの送受信には既存の結果共有・画像共有機能を使ってください。'),
+        if (widget.onSendPhotos != null)
+          FilledButton.icon(
+            onPressed: busy ? null : () => run(widget.onSendPhotos!),
+            icon: const Icon(Icons.send_outlined),
+            label: const Text('レシートの写真をPCへ送る'),
+          ),
+        const Text('送った写真はPCの「スマホから届いた写真」で確認できます。解析・記帳は行いません。'),
       ],
     ),
   );

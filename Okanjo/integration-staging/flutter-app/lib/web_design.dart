@@ -731,12 +731,18 @@ class _ReceiptsPage extends StatelessWidget {
     required this.photos,
     required this.receiptStates,
     required this.onShareBatch,
+    required this.onSendToPc,
+    required this.sending,
+    required this.sendProgress,
     required this.onAdd,
     required this.onDelete,
   });
   final List<File> photos;
   final Map<String, Map<String, dynamic>> receiptStates;
   final VoidCallback onShareBatch;
+  final VoidCallback onSendToPc;
+  final bool sending;
+  final String sendProgress;
   final Future<void> Function(ImageSource) onAdd;
   final Future<void> Function(File) onDelete;
   @override
@@ -802,6 +808,9 @@ class _ReceiptsPage extends StatelessWidget {
                 },
               ),
               const SizedBox(height: 12),
+              FilledButton.icon(onPressed:photos.isEmpty||sending?null:onSendToPc,icon:const Icon(Icons.send_outlined),label:Text(sending?'PCへ送信中…':'写真をPCへ送信')),
+              if(sendProgress.isNotEmpty) Semantics(liveRegion:true,child:Text(sendProgress)),
+              const SizedBox(height:12),
               OutlinedButton.icon(
                 onPressed: photos.isEmpty ? null : onShareBatch,
                 icon: const Icon(Icons.outbox_outlined, size: 17),

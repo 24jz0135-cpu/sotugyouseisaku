@@ -2,13 +2,15 @@
 
 <main class="simple-main">
 <div class="welcome"><p class="eyebrow">おあいそ・パソコンのお手伝い</p><h1>レシートの整理を、<br>ひとつずつ。</h1><p>上から順番に進めてください。金額の確認と記帳は、いつものスマホで行えます。</p><button id="guide-open" class="sub">はじめての方へ</button></div>
-<div id="guide" class="help-card" hidden><h2>パソコンで行うこと</h2><ol><li>同じWi-Fiにつないだスマホを登録します。</li><li>レシートの写真を選びます。</li><li>AIで読み取り、回答をここに戻します。</li><li>スマホへ結果を渡し、スマホで内容を確認します。</li></ol><p>現在、スマホの登録だけでは写真は自動で届きません。写真の選択と、ChatGPTへの受け渡しには操作が必要です。</p><button id="guide-close" class="sub">説明を閉じる</button></div>
+<div id="guide" class="help-card" hidden><h2>パソコンで行うこと</h2><ol><li>同じWi-Fiにつないだスマホを登録します。</li><li>レシートの写真を選びます。</li><li>AIで読み取り、回答をここに戻します。</li><li>スマホへ結果を渡し、スマホで内容を確認します。</li></ol><p>スマホの「レシート保管」→「写真をPCへ送信」で写真を選んで送れます。ChatGPTへの受け渡しには手動操作が必要です。</p><button id="guide-close" class="sub">説明を閉じる</button></div>
 <nav class="step-nav" aria-label="作業の順番"><a href="#step-connect">1 スマホをつなぐ</a><a href="#step-images">2 写真を選ぶ</a><a href="#step-read">3 読み取る</a><a href="#step-return">4 スマホへ渡す</a></nav>
 <section id="step-connect"><div class="step-title"><span>1</span><div><h2>スマホをつなぐ</h2><p>はじめて使うときだけ、スマホを登録します。</p></div></div>
 <ol class="instructions"><li>スマホとパソコンを、同じWi-Fiにつなぎます。</li><li>下のボタンを押し、出てきた四角いコードをスマホで読み取ります。</li><li>スマホのOISOで「PC接続」→「PCの接続QRを読む」を選んでください。</li></ol>
 <button id="lan-pair">スマホで読むコードを表示</button><button id="lan-refresh" class="sub">登録したスマホを確認</button><p id="lan-status" role="status">すでに登録した方は、スマホの「PC接続」で再接続できます。</p><div id="lan-qr"></div><div id="lan-devices"></div>
 <p class="note">ここで表示するのは「接続用」のコードです。読み取り結果を渡すコードは、最後の手順で表示します。</p><a class="next-link" href="#step-images">次へ：レシートの写真を選ぶ ↓</a></section>
 <section id="step-images"><div class="step-title"><span>2</span><div><h2>レシートの写真を選ぶ</h2><p>スマホからパソコンに保存した写真も選べます。</p></div></div>
+<div class="help-card"><h3>スマホから届いた写真</h3><p>スマホの「レシート保管」→「写真をPCへ送信」から送ってください。届くとここに表示されます。</p><button id="received-refresh" class="sub">届いた写真を確認</button><p id="received-status" role="status">確認しています…</p><div id="received-photos" class="list"></div></div>
+<dialog id="received-viewer"><button id="received-close" type="button">閉じる</button><img id="received-full" alt="スマホから届いたレシートの元画像" style="display:block;max-width:100%;height:auto"></dialog>
 <label id="drop" class="drop" for="files"><b>ここを押して、写真を選ぶ</b><small>まとめて何枚でも選べます。写真をここに置いても追加できます。</small><input id="files" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden></label><p><strong id="count">0 枚</strong>の写真を準備しています。</p><p id="workspace-status" role="status"></p><div id="list" class="list"></div>
 <details><summary>以前PCに届いた写真から選ぶ</summary><p>以前の画像転送機能でPCに保存された写真を、一覧に追加します。スマホの接続登録とは別の機能です。</p><button id="bridge-import" class="sub" disabled>保存済みの写真を追加</button></details>
 <a class="next-link" href="#step-read">次へ：写真を読み取る ↓</a></section>
@@ -33,4 +35,4 @@
 <p class="note">科目は国税庁の令和7年分の手引きを参照しています。申告する年の様式と照合してください。<a href="https://www.nta.go.jp/taxes/shiraberu/shinkoku/tebiki/2025/pdf/037.pdf" target="_blank" rel="noopener">青色申告決算書の手引き</a> ／ <a href="https://www.nta.go.jp/taxes/shiraberu/shinkoku/tebiki/2025/pdf/034.pdf" target="_blank" rel="noopener">収支内訳書の手引き</a></p>
 </section>
 </details><footer>Oaiso · 写真の整理と読み取りをお手伝いします。申告内容の確認・申告手続きは別途必要です。</footer></main>
-<script src="mobile-review-data.js"></script><script src="ledger.js"></script><script src="tax.js"></script><script src="tax-ui.js"></script><script src="workspace.js"></script><script src="app.js"></script><script src="theme.js"></script><script src="result-share.js"></script><script src="lan-pair.js"></script><script src="beginner.js"></script></body></html>
+<script src="mobile-review-data.js"></script><script src="ledger.js"></script><script src="tax.js"></script><script src="tax-ui.js"></script><script src="workspace.js"></script><script src="app.js"></script><script src="theme.js"></script><script src="result-share.js"></script><script src="lan-pair.js"></script><script src="beginner.js"></script><script src="received-photos.js"></script></body></html>

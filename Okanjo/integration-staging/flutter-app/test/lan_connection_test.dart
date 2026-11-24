@@ -74,6 +74,12 @@ void main() {
         expect(c['format'], 'oiso2-lan-pair');
         // Simulate a phone whose local clock would consider the QR expired.
         await lan.pair(jsonEncode({...c, 'expires': 0}));
+        final image=File('${dir.path}/receipt.png');
+        await image.writeAsBytes(base64Decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z4xkAAAAASUVORK5CYII='));
+        await lan.sendPhoto(image);
+        await lan.sendPhoto(image); // Retry must not duplicate the image.
+        final empty=File('${dir.path}/empty.png');await empty.writeAsBytes([]);
+        await expectLater(lan.sendPhoto(empty),throwsFormatException);
         expect(
           (await lan.request('GET', '/health'))['serverId'],
           c['serverId'],

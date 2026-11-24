@@ -27,7 +27,7 @@ const root = resolve(process.cwd(), 'bridge-data');
 const inbox = join(root, 'inbox');
 const results = join(root, 'results');
 const resultShares = createResultShares({ port: Number(process.env.RESULT_SHARE_PORT || 8789) });
-const lanHelper = await startLan({ directory: join(root, 'lan'), port: 8793, adminPort: 8794, discoveryPort: 8795 });
+const lanHelper = await startLan({ directory: join(root, 'lan'), port: Number(process.env.LAN_PORT||8793), adminPort: Number(process.env.LAN_ADMIN_PORT||8794), discoveryPort: Number(process.env.LAN_DISCOVERY_PORT||8795) });
 const imageExtensions = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 const mimeFor = filename => ({ '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' }[extname(filename).toLowerCase()] || 'image/jpeg');
 await Promise.all([mkdir(inbox, { recursive: true }), mkdir(results, { recursive: true })]);
@@ -134,12 +134,22 @@ const server = createServer(async (request, response) => {
     if (url.pathname.startsWith('/api/lan/')) {
       if(!/^(127\.0\.0\.1|localhost):\d+$/.test(request.headers.host||'')) return json(response,403,{error:'localhostを使用してください'});
       if(request.method==='POST' && request.headers['x-oiso-lan']!=='1') return json(response,403,{error:'OISO2画面から操作してください'});
+      response.setHeader('Cache-Control','no-store');
+      if(request.method==='GET' && url.pathname==='/api/lan/receipts') {
+        return json(response,200,{receipts:lanHelper.state.receipts.map(r=>({id:r.id,created:r.created,type:r.type,url:'/api/lan/images/'+r.id}))});
+      }
+      if(request.method==='GET' && /^\/api\/lan\/images\/[a-f0-9]{32}$/.test(url.pathname)) {
+        const id=url.pathname.split('/').pop();const receipt=lanHelper.state.receipts.find(r=>r.id===id);
+        if(!receipt)return json(response,404,{error:'写真が見つかりません'});
+        response.writeHead(200,{'Content-Type':'image/'+receipt.type,'X-Content-Type-Options':'nosniff'});
+        return response.end(await readFile(join(root,'lan','images',id)));
+      }
       const routes = { '/api/lan/state': ['GET','/api/state'], '/api/lan/pair': ['POST','/api/pair'], '/api/lan/revoke': ['POST','/api/revoke'] };
       const route=routes[url.pathname];
       if(!route || request.method!==route[0]) return json(response,404,{error:'not found'});
       if(request.method==='POST' && request.headers['content-type']!=='application/json') return json(response,403,{error:'JSON形式で操作してください'});
       const body=request.method==='POST'?await parseBody(request):null;
-      const result=await fetch('http://127.0.0.1:8794'+route[1], {method:route[0],headers:{'Content-Type':'application/json','X-Oaiso-Admin':'1'},...(body?{body:JSON.stringify(body)}:{})});
+      const result=await fetch('http://127.0.0.1:'+lanHelper.adminServer.address().port+route[1], {method:route[0],headers:{'Content-Type':'application/json','X-Oaiso-Admin':'1'},...(body?{body:JSON.stringify(body)}:{})});
       return json(response,result.status,await result.json());
     }
     if(request.method==='GET' && url.pathname==='/lan-pair.js') {response.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8'});return response.end(await readFile(join(appDirectory,'lan-pair.js')));}
@@ -166,7 +176,7 @@ const server = createServer(async (request, response) => {
       response.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
       return response.end(await readFile(join(appDirectory, 'ledger.js')));
     }
-    const assets = { '/beginner.js': ['beginner.js', 'text/javascript'], '/result-share.js': ['result-share.js', 'text/javascript'], '/': ['index.html', 'text/html'], '/workspace.js': ['workspace.js', 'text/javascript'], '/theme.js': ['theme.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'], '/tax.js': ['tax.js', 'text/javascript'], '/tax-ui.js': ['tax-ui.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
+    const assets = { '/received-photos.js':['received-photos.js','text/javascript'], '/beginner.js': ['beginner.js', 'text/javascript'], '/result-share.js': ['result-share.js', 'text/javascript'], '/': ['index.html', 'text/html'], '/workspace.js': ['workspace.js', 'text/javascript'], '/theme.js': ['theme.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'], '/tax.js': ['tax.js', 'text/javascript'], '/tax-ui.js': ['tax-ui.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
     if (request.method === 'GET' && assets[url.pathname]) {
       const [name, type] = assets[url.pathname];
       response.writeHead(200, { 'Content-Type': `${type}; charset=utf-8` });
