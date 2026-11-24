@@ -24,6 +24,7 @@ class LedgerStore {
   late Database _db;
   List<Map<String, dynamic>> _recordCache = [];
   bool _ready = false;
+  List<Map<String,dynamic>> _reviewCache=[];
 
   Future<void> init() async {
     if (_ready) return;
@@ -36,8 +37,9 @@ class LedgerStore {
     await _themePhotos.create(recursive: true);
     _db = await openDatabase(
       p.join(_root.path, 'oaiso.sqlite'),
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
+        await db.execute('CREATE TABLE review_state(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)');
         await db.execute('''CREATE TABLE records (
           id TEXT PRIMARY KEY,
           occurred_at TEXT NOT NULL,
@@ -59,6 +61,7 @@ class LedgerStore {
         )''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
+        if(oldVersion<3) await db.execute('CREATE TABLE review_state(id INTEGER PRIMARY KEY, payload TEXT NOT NULL)');
         if (oldVersion < 2) {
           await db.execute('''CREATE TABLE IF NOT EXISTS receipts (
             id TEXT PRIMARY KEY,
@@ -71,6 +74,9 @@ class LedgerStore {
         }
       },
     );
+    final savedReviews=await _db.query('review_state',where:'id=1');
+    _reviewCache=savedReviews.isEmpty?_decodeList(_prefs.getString(_reviewsKey)):_decodeList(savedReviews.single['payload'] as String);
+    if(savedReviews.isEmpty) await _db.insert('review_state',{'id':1,'payload':jsonEncode(_reviewCache)});
     final existing = await _db.query('records', limit: 1);
     if (existing.isEmpty) {
       final legacy = _decodeList(_prefs.getString(_recordsKey));
@@ -95,8 +101,7 @@ class LedgerStore {
 
   List<Map<String, dynamic>> records() =>
       _recordCache.map((e) => Map<String, dynamic>.from(e)).toList();
-  List<Map<String, dynamic>> reviews() =>
-      _decodeList(_prefs.getString(_reviewsKey));
+  List<Map<String, dynamic>> reviews() => _reviewCache.map((r)=>Map<String,dynamic>.from(r)).toList();
   Map<String, dynamic> settings() => _decodeMap(_prefs.getString(_settingsKey));
   List<Map<String, dynamic>> presets() =>
       _decodeList(_prefs.getString(_presetsKey));
@@ -104,11 +109,18 @@ class LedgerStore {
 
   Future<void> saveRecords(List<Map<String, dynamic>> value) async {
     await init();
-    await _writeRecords(value);
+    final byReceipt={for(final r in value) if(r['receipt_id']!=null) '${r['receipt_id']}':r};
+    final synced=_reviewCache.map((review){
+      final record=byReceipt['${review['receiptId']}'];
+      if(record==null)return Map<String,dynamic>.from(review);
+      return <String,dynamic>{...review,'confirmed':['confirmed','verified','確定済み'].contains(record['status']),'date':'${record['timestamp']??''}'.split('T').first,'vendor':record['vendor_name']??'','amount':'${record['amount']??''}','category':record['category']??'','transaction_type':record['transaction_type']??'expense','payment_method':record['payment_method']??'cash'};
+    }).toList();
+    await _writeRecords(value, reviews:synced);
+    _reviewCache=synced;
     _recordCache = value.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
-  Future<void> _writeRecords(List<Map<String, dynamic>> value) async {
+  Future<void> _writeRecords(List<Map<String, dynamic>> value, {List<Map<String,dynamic>>? reviews}) async {
     await _db.transaction((txn) async {
       await txn.delete('records');
       final batch = txn.batch();
@@ -133,6 +145,7 @@ class LedgerStore {
         });
       }
       await batch.commit(noResult: true);
+      if(reviews!=null)await txn.insert('review_state',{'id':1,'payload':jsonEncode(reviews)},conflictAlgorithm:ConflictAlgorithm.replace);
     });
   }
 
@@ -153,9 +166,38 @@ class LedgerStore {
     await _db.update('receipts', {'status': 'registered', 'linked_record_id': recordId, 'last_error': null}, where: 'id = ?', whereArgs: [id]);
   }
   Future<void> saveReviews(List<Map<String, dynamic>> value) async {
-    if (!await _prefs.setString(_reviewsKey, jsonEncode(value))) {
-      throw const FileSystemException('解析結果を端末に保存できませんでした');
-    }
+    await init();
+    await _db.insert('review_state',{'id':1,'payload':jsonEncode(value)},conflictAlgorithm:ConflictAlgorithm.replace);
+    _reviewCache=value.map((r)=>Map<String,dynamic>.from(r)).toList();
+  }
+
+  /// Save candidate edits and their ledger status in the same SQLite transaction.
+  Future<void> saveReviewWorkflow(List<Map<String,dynamic>> value) async {
+    await init();
+    final next=_recordCache.map((r)=>Map<String,dynamic>.from(r)).toList();
+    final ids=<String>{};
+    await _db.transaction((tx) async {
+      for(final review in value){
+        final id='${review['receiptId']??''}';
+        if(id.isEmpty||!ids.add(id))throw const FormatException('レシートIDが空欄または重複しています');
+        final approved=review['confirmed']==true;
+        final date='${review['date']??''}';final parsed=DateTime.tryParse(date);
+        final validDate=parsed!=null&&RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date)&&parsed.toIso8601String().substring(0,10)==date;
+        final amount=int.tryParse('${review['amount']??''}');
+        if(approved&&(!validDate||amount==null||'${review['vendor']??''}'.trim().isEmpty||'${review['category']??''}'.trim().isEmpty))throw const FormatException('日付・店舗名・金額・科目を修正してください');
+        final index=next.indexWhere((r)=>r['receipt_id']==id);
+        final existing=index<0?<String,dynamic>{}:next[index];
+        final receipt=await tx.query('receipts',where:'id=?',whereArgs:[id],limit:1);
+        final kind='${review['transaction_type']??'expense'}';
+        final timestamp=validDate?'${date}T00:00:00.000':existing['timestamp']??DateTime.now().toIso8601String();
+        final record=<String,dynamic>{...existing,'id':existing['id']??'review:$id','receipt_id':id,'timestamp':timestamp,'sensor_type':'AI_REVIEW','raw_text':review['vendor'],'vendor_name':review['vendor']??'店舗未確認','amount':amount??0,'category':review['category']??'','transaction_type':['income','purchase','expense'].contains(kind)?kind:'expense','payment_method':review['payment_method']??'cash','status':approved?'confirmed':'pending',if(receipt.isNotEmpty)'image_path':receipt.single['path']};
+        await tx.insert('records',{'id':record['id'],'occurred_at':timestamp,'transaction_type':record['transaction_type'],'payment_method':record['payment_method'],'amount':record['amount'],'category':record['category'],'status':record['status'],'receipt_path':record['image_path'],'payload':jsonEncode(record)},conflictAlgorithm:ConflictAlgorithm.replace);
+        if(index<0){next.insert(0,record);}else{next[index]=record;}
+        await tx.update('receipts',{'status':approved?'registered':'needs_review','linked_record_id':approved?record['id']:null},where:'id=?',whereArgs:[id]);
+      }
+      await tx.insert('review_state',{'id':1,'payload':jsonEncode(value)},conflictAlgorithm:ConflictAlgorithm.replace);
+    });
+    _recordCache=next;_reviewCache=value.map((r)=>Map<String,dynamic>.from(r)).toList();
   }
 
   Future<void> saveSettings(Map<String, dynamic> value) async =>

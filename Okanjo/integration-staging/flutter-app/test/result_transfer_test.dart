@@ -39,6 +39,12 @@ void main() {
       if(code!=null)expect(find.textContaining('初回接続のコード'),findsWidgets);
     }
   });
+  testWidgets('failed confirmation reports an error and keeps the review pending', (tester)async{
+    final rows=[<String,dynamic>{'receiptId':'keep','vendor':'未確定店舗','date':'2026-11-24','amount':'1200','category':'消耗品費','confirmed':false}];
+    await tester.pumpWidget(MaterialApp(home:ReceiptReviewPage(reviews:rows,onChange:(_)async{throw Exception('保存失敗');})));
+    await tester.ensureVisible(find.byIcon(Icons.check_circle_outline));await tester.tap(find.byIcon(Icons.check_circle_outline));await tester.pumpAndSettle();
+    expect(rows.single['confirmed'],false);expect(find.textContaining('保存できません'),findsOneWidget);expect(find.byIcon(Icons.check_circle),findsNothing);
+  });
   test(
     'accepts only local result links and retrieves bounded result CSV',
     () async {
@@ -119,6 +125,8 @@ void main() {
       await tester.tap(find.byIcon(Icons.check_circle_outline));
       await tester.pumpAndSettle();
       expect(rows.single['confirmed'], true);
+      expect(find.byIcon(Icons.check_circle),findsOneWidget);
+      expect(find.text('確定しました。確定済みファクトに反映しました。'),findsOneWidget);
       // Reopen the review screen with saved edits before importing the same result.
       await tester.pumpWidget(screen());
       await tester.pumpAndSettle();

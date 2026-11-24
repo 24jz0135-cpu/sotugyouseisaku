@@ -15,18 +15,45 @@ void main() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
     directory = await Directory.systemTemp.createTemp('oiso-backup-test-');
-    SharedPreferences.setMockInitialValues({});
+    final oldDb=await openDatabase('${directory.path}/OISO/oaiso.sqlite',version:2,onCreate:(db,version)async{
+      await db.execute('CREATE TABLE records(id TEXT PRIMARY KEY, occurred_at TEXT NOT NULL, transaction_type TEXT, payment_method TEXT, amount INTEGER, category TEXT, status TEXT, receipt_path TEXT, payload TEXT NOT NULL)');
+      await db.execute('CREATE TABLE receipts(id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, status TEXT, added_at TEXT, linked_record_id TEXT, last_error TEXT)');
+    });
+    await oldDb.close();
+    SharedPreferences.setMockInitialValues({'instant-ledger-reviews':jsonEncode([{'receiptId':'legacy-review','confirmed':false}])});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('plugins.flutter.io/path_provider'),
           (_) async => directory.path,
         );
     await store.init();
+    expect(store.reviews().single['receiptId'],'legacy-review');
+    final migrated=await openDatabase('${directory.path}/OISO/oaiso.sqlite');
+    expect(await migrated.getVersion(),3);
   });
   tearDownAll(() async {
     final db = await openDatabase('${directory.path}/OISO/oaiso.sqlite');
     await db.close();
     await directory.delete(recursive: true);
+  });
+
+  test('received reviews are pending; approval and edit update the ledger atomically',()async{
+    await store.saveRecords([]);await store.saveReviews([]);
+    final pending=<String,dynamic>{'receiptId':'received-1','vendor':'受信店舗','date':'2026-11-24','amount':'1200','category':'消耗品費','confirmed':false};
+    await store.saveReviewWorkflow([pending]);
+    expect(store.records().single['status'],'pending');expect(store.reviews().single['confirmed'],false);
+    final recordId=store.records().single['id'];
+    await store.saveReviewWorkflow([{...pending,'confirmed':true}]);
+    expect(store.records().single['status'],'confirmed');expect(store.reviews().single['confirmed'],true);
+    await store.saveReviewWorkflow([{...pending,'confirmed':true}]);expect(store.records().length,1);expect(store.records().single['id'],recordId);
+    await store.saveReviewWorkflow([{...pending,'amount':'1500'}]);
+    expect(store.records().single['status'],'pending');expect(store.records().single['amount'],1500);
+    await expectLater(store.saveReviewWorkflow([{...pending,'receiptId':'new-2'}, {...pending,'amount':'','confirmed':true}]),throwsFormatException);
+    expect(store.records().length,1);expect(store.records().single['amount'],1500);expect(store.reviews().single['confirmed'],false);
+    await store.saveRecords([{...store.records().single,'status':'confirmed'}]);
+    expect(store.reviews().single['confirmed'],true);
+    await store.saveReviewWorkflow(store.reviews());
+    expect(store.records().single['status'],'confirmed');
   });
 
   test(

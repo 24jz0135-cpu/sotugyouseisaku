@@ -249,6 +249,7 @@ class _ShellState extends State<_Shell> {
 
   Future<void> _persistRecords() async {
     await LedgerStore.instance.saveRecords(records);
+    reviews=LedgerStore.instance.reviews();
     if (mounted) setState(() {});
   }
 
@@ -441,12 +442,7 @@ class _ShellState extends State<_Shell> {
       ),
       ReceiptReviewPage(
         reviews: reviews,
-        onApprove: _approveReview,
-        onChange: (r) async {
-          await LedgerStore.instance.saveReviews(r);
-          await _refreshPhotos();
-          if (mounted) setState(() => reviews = r);
-        },
+        onChange: _saveReviewWorkflow,
       ),
     ];
     return Scaffold(
@@ -498,44 +494,13 @@ class _ShellState extends State<_Shell> {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReceiptReviewPage(
       readCodeOnOpen:readCode,
       reviews: reviews,
-      onApprove: _approveReview,
-      onChange: (rows) async {
-        await LedgerStore.instance.saveReviews(rows);
-        await _refreshPhotos();
-        if (mounted) setState(() => reviews = rows);
-      },
+      onChange: _saveReviewWorkflow,
     )));
   }
-  Future<void> _approveReview(Map<String, dynamic> row) async {
-    final receiptId = '${row['receiptId'] ?? row['receipt_id'] ?? ''}';
-    final existingIndex = records.indexWhere((r) => receiptId.isNotEmpty && '${r['receipt_id'] ?? ''}' == receiptId);
-    final category = '${row['category'] ?? 'その他'}';
-    final kind = '${row['transaction_type'] ?? (category == '売上高' ? 'income' : (category == '仕入高' ? 'purchase' : 'expense'))}';
-    final receiptRows = await LedgerStore.instance.receipts();
-    final receiptIndex = receiptRows.indexWhere((r) => '${r['id']}' == receiptId);
-    final receipt = receiptIndex >= 0 ? receiptRows[receiptIndex] : null;
-    final record = <String, dynamic>{
-      'id': existingIndex >= 0 ? records[existingIndex]['id'] : DateTime.now().microsecondsSinceEpoch.toString(),
-      'timestamp': '${row['date'] ?? DateTime.now().toIso8601String().substring(0, 10)}T00:00:00.000',
-      'sensor_type': 'AI_REVIEW',
-      'raw_text': row['vendor'],
-      'vendor_name': row['vendor'],
-      'amount': int.tryParse('${row['amount'] ?? ''}') ?? 0,
-      'category': category,
-      'transaction_type': kind,
-      'payment_method': '${row['payment_method'] ?? 'cash'}',
-      'status': 'confirmed',
-      if (receiptId.isNotEmpty) 'receipt_id': receiptId,
-      if (receipt != null) 'image_path': receipt['path'],
-    };
-    if (existingIndex >= 0) {
-      records[existingIndex] = record;
-    } else {
-      records.insert(0, record);
-    }
-    await _persistRecords();
-    if (receiptId.isNotEmpty) await LedgerStore.instance.linkReceipt(receiptId, '${record['id']}');
+  Future<void> _saveReviewWorkflow(List<Map<String,dynamic>> value) async {
+    await LedgerStore.instance.saveReviewWorkflow(value);
     await _refreshPhotos();
+    if(mounted)setState((){reviews=LedgerStore.instance.reviews();records=LedgerStore.instance.records();});
   }
   Future<void> _showAddRecord([Map<String, dynamic>? existing]) async {
     final vendor = TextEditingController(text: existing?['vendor_name']?.toString() ?? '');
@@ -1396,6 +1361,7 @@ class ReceiptReviewPage extends StatefulWidget {
 
 class ReceiptReviewPageState extends State<ReceiptReviewPage> {
   bool receiving = false;
+  final Set<String> confirming={};
   late List<Map<String, dynamic>> reviewRows;
   @override
   void initState() {
@@ -1445,17 +1411,20 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
               child: ListTile(
                 title: Text('${r['vendor'] ?? '店舗未確認'} · ¥${r['amount'] ?? 0}'),
                 subtitle: Text(
-                  '${r['date'] ?? ''} · ${r['category'] ?? '未分類'} · ${r['confirmed'] == true ? '確認済み' : '未確認'}${_reviewIssues(r).isEmpty ? '' : ' · 要確認: ${_reviewIssues(r).join('・')}'}',
+                  '${r['date'] ?? ''} · ${r['category'] ?? '未分類'} · ${r['confirmed'] == true ? '確定済み' : '未確定'}${_reviewIssues(r).isEmpty ? '' : ' · 要確認: ${_reviewIssues(r).join('・')}'}',
                 ),
                 trailing: Wrap(
                   children: [
                     IconButton(
                       icon: const Icon(Icons.edit_outlined),
-                      onPressed: () => _edit(r),
+                      onPressed: confirming.isNotEmpty?null:()=>_edit(r),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.check_circle_outline),
-                      onPressed: () => _confirm(r),
+                      tooltip:r['confirmed']==true?'確定済み':'確認して確定する',
+                      color:r['confirmed']==true?Colors.green:null,
+                      disabledColor:r['confirmed']==true?Colors.green:null,
+                      icon:Icon(r['confirmed']==true?Icons.check_circle:Icons.check_circle_outline),
+                      onPressed:r['confirmed']==true||confirming.isNotEmpty||receiving?null:()=>_confirm(r),
                     ),
                   ],
                 ),
@@ -1527,9 +1496,6 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
     if (reviewRows.length + data.length > 5000)
       throw const FormatException('保存件数の上限は5000件です');
     if (!await _saveReviewChanges([...reviewRows, ...data])) return;
-    for (final row in data) {
-      await LedgerStore.instance.setReceiptStatus('${row['receiptId']}', 'needs_review');
-    }
     if (mounted)
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${data.length}件を追加しました。重複する明細は修正内容を保護しました。')),
@@ -1647,22 +1613,29 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
     }
   }
 
+  void _reviewNotice(String message) {
+    if(!mounted)return;
+    final messenger=ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(SnackBar(content:Text(message)));
+  }
+
   Future<void> _confirm(Map<String, dynamic> record) async {
     final issues = _reviewIssues(record);
     if (issues.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('確認前に修正してください: ${issues.join('・')}')),
-      );
+      _reviewNotice('確認前に修正してください: ${issues.join('・')}');
       return;
     }
-    final list = [...reviewRows];
-    final index = list.indexOf(record);
-    if (index < 0) return;
-    list[index] = {...record, 'confirmed': true};
-    if (widget.onApprove != null) {
-      await widget.onApprove!(list[index]);
-    }
-    await _saveReviewChanges(list);
+    final id='${record['receiptId']}';
+    if(confirming.isNotEmpty||receiving||record['confirmed']==true)return;
+    setState(()=>confirming.add(id));
+    try {
+      final list=[...reviewRows];final index=list.indexOf(record);if(index<0)return;
+      list[index]={...record,'confirmed':true};
+      if(widget.onApprove!=null)await widget.onApprove!(list[index]);
+      if(await _saveReviewChanges(list)&&mounted)_reviewNotice('確定しました。確定済みファクトに反映しました。');
+    }catch(e){if(mounted)_reviewNotice('確定できませんでした: $e');}
+    finally{if(mounted)setState(()=>confirming.remove(id));}
   }
 
   Future<void> _edit(Map<String, dynamic> r) async {

@@ -68,7 +68,7 @@ class _LanConnectionPageState extends State<LanConnectionPage> {
     body: ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        const Text('Oaiso 0.2.2 · 結果QR受信対応', style: TextStyle(fontSize: 14)),
+        const Text('Oaiso 0.2.3 · 未確定・確定対応', style: TextStyle(fontSize: 14)),
         const Icon(Icons.devices, size: 64),
         const SizedBox(height: 24),
         const Text(
