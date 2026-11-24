@@ -11,6 +11,34 @@ const csv =
     'receiptId,date,vendor,amount,category,confidence\nR-1,2026-11-10,誤読店舗,1250,消耗品費,0.8';
 
 void main() {
+  testWidgets('step 4 QR scanner imports and displays the scanned result', (tester) async {
+    var rows=<Map<String,dynamic>>[];var scans=0;
+    await tester.pumpWidget(MaterialApp(home:ReceiptReviewPage(
+      reviews:rows,readCodeOnOpen:true,
+      scanResultCode:(_)async{scans++;return link;},
+      receive:(value)async{expect(value,link);return csv;},
+      onChange:(value)async{rows=value;},
+    )));
+    await tester.pumpAndSettle();
+    expect(scans,1);expect(rows.single['vendor'],'誤読店舗');
+    expect(rows.single['confirmed'],false);
+    expect(find.textContaining('誤読店舗'),findsOneWidget);
+    expect(find.text('④ PCの結果コードを読む'),findsOneWidget);
+  });
+  testWidgets('cancelled or pairing QR does not import or alter stored results', (tester) async {
+    for(final code in <String?>[null,'{"format":"oiso2-lan-pair"}']) {
+      var imports=0;
+      final rows=[<String,dynamic>{'receiptId':'keep','vendor':'保存済み','date':'2026-11-24','amount':'1000','category':'消耗品費','confirmed':true}];
+      await tester.pumpWidget(MaterialApp(key:UniqueKey(),home:ReceiptReviewPage(
+        reviews:rows,readCodeOnOpen:true,scanResultCode:(_)async=>code,
+        receive:(_)async{imports++;return csv;},
+        onChange:(_)async{fail('Existing rows must remain unchanged');},
+      )));
+      await tester.pumpAndSettle();
+      expect(imports,0);expect(rows.single['confirmed'],true);
+      if(code!=null)expect(find.textContaining('初回接続のコード'),findsWidgets);
+    }
+  });
   test(
     'accepts only local result links and retrieves bounded result CSV',
     () async {
@@ -59,11 +87,11 @@ void main() {
       await tester.pumpWidget(screen());
       Future<void> receive() async {
         await tester.scrollUntilVisible(
-          find.text('PCの結果をQRで受け取る'),
+          find.text('URLを貼り付けて受け取る'),
           -200,
           scrollable: find.byType(Scrollable).first,
         );
-        await tester.tap(find.text('PCの結果をQRで受け取る'));
+        await tester.tap(find.text('URLを貼り付けて受け取る'));
         await tester.pumpAndSettle();
         await tester.enterText(find.byType(TextField), link);
         await tester.tap(find.text('受信'));

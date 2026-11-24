@@ -5,8 +5,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'lan_connection.dart';
 
 class LanConnectionPage extends StatefulWidget {
-  const LanConnectionPage({super.key, this.onSendPhotos});
+  const LanConnectionPage({super.key, this.onSendPhotos,this.onReceiveResults});
   final Future<void> Function()? onSendPhotos;
+  final VoidCallback? onReceiveResults;
   @override
   State<LanConnectionPage> createState() => _LanConnectionPageState();
 }
@@ -67,7 +68,7 @@ class _LanConnectionPageState extends State<LanConnectionPage> {
     body: ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        const Text('Oaiso 0.2.1 · 写真送信対応', style: TextStyle(fontSize: 14)),
+        const Text('Oaiso 0.2.2 · 結果QR受信対応', style: TextStyle(fontSize: 14)),
         const Icon(Icons.devices, size: 64),
         const SizedBox(height: 24),
         const Text(
@@ -140,7 +141,10 @@ class _LanConnectionPageState extends State<LanConnectionPage> {
             icon: const Icon(Icons.send_outlined),
             label: const Text('レシートの写真をPCへ送る'),
           ),
-        const Text('送った写真はPCの「スマホから届いた写真」で確認できます。解析・記帳は行いません。'),
+        const Text('送った写真はPCの「スマホから届いた写真」で確認できます。'),
+        const SizedBox(height:20),
+        if(widget.onReceiveResults!=null) FilledButton.icon(onPressed:busy?null:widget.onReceiveResults,icon:const Icon(Icons.qr_code_scanner),label:const Text('④ PCの結果コードを読む')),
+        const Text('PCの④で表示した結果受信用のコードを読み取ります。初回接続のコードではありません。'),
       ],
     ),
   );

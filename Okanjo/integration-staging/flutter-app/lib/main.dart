@@ -416,6 +416,7 @@ class _ShellState extends State<_Shell> {
         receiptStates: receiptStates,
         onShareBatch: _shareReceiptBatch,
         onSendToPc: _sendPhotosToPc,
+        onReceiveResults:()=>_openReviewPage(readCode:true),
         sending: sendingPhotos,
         sendProgress: sendProgress,
         onAdd: _addPhoto,
@@ -450,7 +451,7 @@ class _ShellState extends State<_Shell> {
     ];
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => LanConnectionPage(onSendPhotos:_sendPhotosToPc))),
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => LanConnectionPage(onSendPhotos:_sendPhotosToPc,onReceiveResults:()=>_openReviewPage(readCode:true)))),
         icon: const Icon(Icons.qr_code_scanner), label: const Text('PC接続'),
       ),
       appBar: PreferredSize(
@@ -493,8 +494,9 @@ class _ShellState extends State<_Shell> {
     );
   }
 
-  void _openReviewPage() {
+  void _openReviewPage({bool readCode=false}) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => ReceiptReviewPage(
+      readCodeOnOpen:readCode,
       reviews: reviews,
       onApprove: _approveReview,
       onChange: (rows) async {
@@ -1379,11 +1381,15 @@ class ReceiptReviewPage extends StatefulWidget {
     required this.onChange,
     this.onApprove,
     this.receive = receiveResultCsv,
+    this.readCodeOnOpen=false,
+    this.scanResultCode,
   });
   final List<Map<String, dynamic>> reviews;
   final Future<void> Function(List<Map<String, dynamic>>) onChange;
   final Future<void> Function(Map<String, dynamic>)? onApprove;
   final Future<String> Function(String) receive;
+  final bool readCodeOnOpen;
+  final Future<String?> Function(BuildContext)? scanResultCode;
   @override
   State<ReceiptReviewPage> createState() => ReceiptReviewPageState();
 }
@@ -1395,6 +1401,7 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
   void initState() {
     super.initState();
     reviewRows = widget.reviews;
+    if(widget.readCodeOnOpen) WidgetsBinding.instance.addPostFrameCallback((_){if(mounted)_scanResultCode();});
   }
 
   @override
@@ -1410,11 +1417,13 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
     body: ListView(
       padding: const EdgeInsets.all(18),
       children: [
-        const Text('PCから解析結果を受け取り、店舗名・日付・金額・科目を手で修正できます。同じWi-Fiに接続してください。'),
+        const Text('PCの④「結果をスマホへ渡すコードを表示」で出たコードを読み取ります。接続登録用のコードとは別です。受信後に店舗名・日付・金額・科目を修正できます。'),
+        FilledButton.icon(onPressed:receiving?null:_scanResultCode,icon:const Icon(Icons.qr_code_scanner),label:const Text('④ PCの結果コードを読む')),
+        const SizedBox(height:12),
         FilledButton.icon(
           onPressed: receiving ? null : _receiveFromPc,
           icon: const Icon(Icons.qr_code_scanner),
-          label: Text(receiving ? 'PCから受信中…' : 'PCの結果をQRで受け取る'),
+          label: Text(receiving ? 'PCから受信中…' : 'URLを貼り付けて受け取る'),
         ),
         const SizedBox(height: 14),
         FilledButton.icon(
@@ -1541,6 +1550,20 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
     }
   }
 
+  Future<void> _scanResultCode() async {
+    if(receiving)return;
+    setState(()=>receiving=true);
+    try {
+      final code=widget.scanResultCode!=null
+        ? await widget.scanResultCode!(context)
+        : await Navigator.push<String>(context,MaterialPageRoute(builder:(_)=>const _QrPage(title:'④ PCの結果コードを読む')));
+      if(code==null||!mounted)return;
+      await _receiveResult(code);
+    } catch(e) {
+      if(mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e is FormatException?e.message:'コードを読み取れませんでした。カメラの利用許可を確認してください。')));
+    } finally {if(mounted)setState(()=>receiving=false);}
+  }
+
   Future<void> _receiveFromPc() async {
     final controller = TextEditingController();
     final value = await showDialog<String>(
@@ -1585,14 +1608,19 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
       ),
     );
     if (value == null || !mounted) return;
+    await _receiveResult(value);
+  }
+
+  Future<void> _receiveResult(String value) async {
     setState(() => receiving = true);
     try {
+      resultShareUri(value);
       final csv = await widget.receive(value);
       if (mounted) await _acceptCsv(csv);
     } catch (e) {
       if (mounted)
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('受信できません: $e。同じWi-FiとPCの起動状態を確認してください。')),
+          SnackBar(content: Text(e is FormatException?e.message:'受信できませんでした。同じWi-FiとPCの起動状態を確認してください。')),
         );
     } finally {
       if (mounted) setState(() => receiving = false);
@@ -1921,10 +1949,14 @@ class _QrPage extends StatefulWidget {
 
 class _QrPageState extends State<_QrPage> {
   bool returned = false;
+  final scanner=MobileScannerController();
+  @override void dispose(){scanner.dispose();super.dispose();}
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(widget.title)),
     body: MobileScanner(
+      controller:scanner,
+      errorBuilder:(_,_)=>const Center(child:Padding(padding:EdgeInsets.all(24),child:Text('カメラを使用できません。端末設定でOISOのカメラ利用を許可してください。'))),
       onDetect: (capture) {
         final raw = capture.barcodes.firstOrNull?.rawValue;
         if (raw != null && context.mounted && !returned) {

@@ -20,7 +20,7 @@ Uri resultShareUri(String value) {
       uri.port < 1 ||
       uri.port > 65535 ||
       !RegExp(r'^/s/[A-Za-z0-9_-]{32}/$').hasMatch(uri.path)) {
-    throw const FormatException('PCの「スマホで修正するQR」で作成したURLを使ってください');
+    throw const FormatException('PCの④「結果をスマホへ渡すコードを表示」で作ったコードを読み取ってください。初回接続のコードはここでは使えません');
   }
   return uri;
 }

@@ -732,6 +732,7 @@ class _ReceiptsPage extends StatelessWidget {
     required this.receiptStates,
     required this.onShareBatch,
     required this.onSendToPc,
+    required this.onReceiveResults,
     required this.sending,
     required this.sendProgress,
     required this.onAdd,
@@ -741,6 +742,7 @@ class _ReceiptsPage extends StatelessWidget {
   final Map<String, Map<String, dynamic>> receiptStates;
   final VoidCallback onShareBatch;
   final VoidCallback onSendToPc;
+  final VoidCallback onReceiveResults;
   final bool sending;
   final String sendProgress;
   final Future<void> Function(ImageSource) onAdd;
@@ -809,6 +811,7 @@ class _ReceiptsPage extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               FilledButton.icon(onPressed:photos.isEmpty||sending?null:onSendToPc,icon:const Icon(Icons.send_outlined),label:Text(sending?'PCへ送信中…':'写真をPCへ送信')),
+              OutlinedButton.icon(onPressed:onReceiveResults,icon:const Icon(Icons.qr_code_scanner),label:const Text('④ PCの結果コードを読む')),
               if(sendProgress.isNotEmpty) Semantics(liveRegion:true,child:Text(sendProgress)),
               const SizedBox(height:12),
               OutlinedButton.icon(
