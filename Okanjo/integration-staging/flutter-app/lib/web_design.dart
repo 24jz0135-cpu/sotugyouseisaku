@@ -443,7 +443,7 @@ class _HomePage extends StatelessWidget {
       return d != null && d.year == now.year && d.month == now.month;
     }).toList();
     final pending = records.where((r) => !_confirmed(r)).toList();
-    final verified = month.where(_confirmed).toList();
+    final verified = records.where(_confirmed).toList();
     final approvedMonth = month.where(_confirmed).toList();
     int sum(List<Map<String, dynamic>> rows) =>
         rows.fold(0, (a, r) => a + _num(r['amount']));
@@ -540,7 +540,7 @@ class _HomePage extends StatelessWidget {
             Expanded(
               child: _WebStat(
                 title: '確定済み経費',
-                scope: '今月',
+                scope: '全期間',
                 rows: verified,
                 palette: palette,
                 settings: settings,

@@ -103,7 +103,7 @@ void main() {
       );
     }
   }
-  testWidgets('pending dashboard includes earlier years and missing dates; approval removes only the confirmed receipt', (tester) async {
+  testWidgets('dashboard moves earlier-year receipts from pending to confirmed without changing monthly totals', (tester) async {
     final store=LedgerStore.instance;
     final now=DateTime.now();
     final date='${now.year-1}-01-02';
@@ -126,7 +126,7 @@ void main() {
       await tester.pumpAndSettle();
     }
     await openDashboard();
-    expect(find.text('全期間'),findsOneWidget);
+    expect(find.text('全期間'),findsNWidgets(2));
     expect(find.text('2 件'),findsOneWidget);
     expect(find.text('¥2,300'),findsOneWidget);
     expect(find.text('¥750'),findsWidgets);
@@ -135,7 +135,11 @@ void main() {
     expect(find.text('¥2,300'),findsNothing);
     expect(find.text('¥300'),findsWidgets);
     expect(find.text('¥750'),findsWidgets);
-    expect(find.text('1 件'),findsNWidgets(2));
+    expect(find.text('1 件'),findsOneWidget);
+    expect(find.text('2 件'),findsOneWidget);
+    expect(find.text('¥2,750'),findsOneWidget);
+    final monthlyCard=find.ancestor(of:find.text('今月の経費合計'),matching:find.byType(Column)).first;
+    expect(find.descendant(of:monthlyCard,matching:find.text('¥750')),findsOneWidget);
     expect(tester.takeException(),isNull);
   });
 
