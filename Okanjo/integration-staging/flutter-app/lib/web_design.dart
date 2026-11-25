@@ -442,7 +442,7 @@ class _HomePage extends StatelessWidget {
       final d = DateTime.tryParse('${r['timestamp'] ?? ''}');
       return d != null && d.year == now.year && d.month == now.month;
     }).toList();
-    final pending = month.where((r) => !_confirmed(r)).toList();
+    final pending = records.where((r) => !_confirmed(r)).toList();
     final verified = month.where(_confirmed).toList();
     final approvedMonth = month.where(_confirmed).toList();
     int sum(List<Map<String, dynamic>> rows) =>
@@ -530,6 +530,7 @@ class _HomePage extends StatelessWidget {
             Expanded(
               child: _WebStat(
                 title: '未確定ファクト',
+                scope: '全期間',
                 rows: pending,
                 palette: palette,
                 settings: settings,
@@ -539,6 +540,7 @@ class _HomePage extends StatelessWidget {
             Expanded(
               child: _WebStat(
                 title: '確定済み経費',
+                scope: '今月',
                 rows: verified,
                 palette: palette,
                 settings: settings,
@@ -684,12 +686,13 @@ String _monthTrend(
 class _WebStat extends StatelessWidget {
   const _WebStat({
     required this.title,
+    required this.scope,
     required this.rows,
     required this.palette,
     required this.settings,
     required this.target,
   });
-  final String title, target;
+  final String title, target, scope;
   final List<Map<String, dynamic>> rows;
   final _Palette palette;
   final Map<String, dynamic> settings;
@@ -705,6 +708,7 @@ class _WebStat extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(title, style: TextStyle(fontSize: 11, color: palette.muted)),
+          Text(scope, style: TextStyle(fontSize: 10, color: palette.muted)),
           const SizedBox(height: 8),
           Text(
             '${rows.length} 件',

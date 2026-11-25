@@ -103,4 +103,40 @@ void main() {
       );
     }
   }
+  testWidgets('pending dashboard includes earlier years and missing dates; approval removes only the confirmed receipt', (tester) async {
+    final store=LedgerStore.instance;
+    final now=DateTime.now();
+    final date='${now.year-1}-01-02';
+    final reviews=[
+      <String,dynamic>{'receiptId':'old-pending','vendor':'前年の未確定','date':date,'amount':'2000','category':'消耗品費','confirmed':false},
+      <String,dynamic>{'receiptId':'current-approved','vendor':'今月の確定','date':now.toIso8601String().substring(0,10),'amount':'750','category':'消耗品費','confirmed':true},
+    ];
+    await tester.runAsync(() async {
+      await store.saveRecords([]);await store.saveReviews([]);
+      await store.saveReviewWorkflow(reviews);
+      await store.saveRecords([...store.records(),<String,dynamic>{'id':'no-date','timestamp':'','vendor_name':'日付未確認','amount':300,'status':'pending'}]);
+    });
+    Future<void> openDashboard() async {
+      await tester.pumpWidget(OisoApp(key:UniqueKey()));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('login-local')));
+      await tester.tap(find.byKey(const Key('login-local')));
+      await tester.pump();
+      await tester.runAsync(() async {await Future<void>.delayed(const Duration(milliseconds:100));});
+      await tester.pumpAndSettle();
+    }
+    await openDashboard();
+    expect(find.text('全期間'),findsOneWidget);
+    expect(find.text('2 件'),findsOneWidget);
+    expect(find.text('¥2,300'),findsOneWidget);
+    expect(find.text('¥750'),findsWidgets);
+    await tester.runAsync(() async {await store.saveReviewWorkflow(store.reviews().map((r)=>r['receiptId']=='old-pending'?{...r,'confirmed':true}:r).toList());});
+    await openDashboard();
+    expect(find.text('¥2,300'),findsNothing);
+    expect(find.text('¥300'),findsWidgets);
+    expect(find.text('¥750'),findsWidgets);
+    expect(find.text('1 件'),findsNWidgets(2));
+    expect(tester.takeException(),isNull);
+  });
+
 }
