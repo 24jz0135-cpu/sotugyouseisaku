@@ -57,6 +57,28 @@ void main() {
     expect(tester.widget<Text>(find.byKey(const ValueKey('receipt-receive-status'))).data,contains('以前に保存した結果'));
     expect(tester.takeException(),isNull);
   });
+  testWidgets('mixed duplicate and new receipts warn before saving and can be cancelled', (tester) async {
+    for (final accept in [false, true]) {
+      var saves=0;
+      var rows=[<String,dynamic>{'receiptId':'R-1','vendor':'手修正済み','date':'2026-11-24','amount':'1500','category':'消耗品費','confirmed':true}];
+      final mixed='$csv\nR-new,2026-11-24,新しい店,2000,消耗品費,0.9';
+      await tester.pumpWidget(MaterialApp(key:UniqueKey(),home:ReceiptReviewPage(
+        reviews:rows,readCodeOnOpen:true,scanResultCode:(_)async=>link,
+        receive:(_)async=>mixed,onChange:(value)async{saves++;rows=value;},
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('受け取り済みのレシートがあります'), findsOneWidget);
+      expect(saves,0);
+      await tester.tap(find.text(accept?'新しい1件だけ追加':'キャンセル'));
+      await tester.pumpAndSettle();
+      expect(saves,accept?1:0);
+      expect(rows.length,accept?2:1);
+      final old=rows.singleWhere((r)=>r['receiptId']=='R-1');
+      expect(old['vendor'],'手修正済み');expect(old['confirmed'],true);
+      if(accept) expect(rows.first['receiptId'],'R-new');
+      expect(tester.takeException(),isNull);
+    }
+  });
   testWidgets('cancelled or pairing QR does not import or alter stored results', (tester) async {
     for(final code in <String?>[null,'{"format":"oiso2-lan-pair"}']) {
       var imports=0;
@@ -163,6 +185,9 @@ void main() {
       await tester.pumpWidget(screen());
       await tester.pumpAndSettle();
       await receive();
+      expect(find.text('受け取り済みのレシートがあります'), findsOneWidget);
+      await tester.tap(find.text('閉じる'));
+      await tester.pumpAndSettle();
       expect(rows.length, 1);
       expect(rows.single['vendor'], '修正した店舗');
       expect(rows.single['amount'], '1500');

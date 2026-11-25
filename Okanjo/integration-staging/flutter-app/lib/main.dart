@@ -1499,7 +1499,27 @@ class ReceiptReviewPageState extends State<ReceiptReviewPage> {
     if (reviewRows.length + data.length > 5000)
       throw const FormatException('保存件数の上限は5000件です');
     final skipped = seen.length - data.length;
-    if (!await _saveReviewChanges([...data, ...reviewRows])) return;
+    if (skipped > 0) {
+      if (!mounted) return;
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('受け取り済みのレシートがあります'),
+          content: Text('今回の${seen.length}件のうち、$skipped件は同じレシート番号で保存済みです。重複分は追加・上書きしません。' +
+              (data.isEmpty ? '\n新しい結果はありません。PCの④で今回の結果を共有しているか確認してください。' : '\n新しい${data.length}件だけを追加できます。')),
+          actions: [
+            if (data.isNotEmpty) TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('キャンセル')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(data.isEmpty ? '閉じる' : '新しい${data.length}件だけ追加')),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      if (proceed != true) {
+        setState(() => receiveStatus = '受け取りを中止しました。保存済みの明細は変更していません。');
+        return;
+      }
+    }
+    if (data.isNotEmpty && !await _saveReviewChanges([...data, ...reviewRows])) return;
     if (!mounted) return;
     final message = data.isEmpty
         ? '今回の${seen.length}件はすべて受け取り済みの番号のため、追加していません。PCの④で新しいレシートの結果を共有しているか確認してください。保存済みの修正内容は保持しています。'
